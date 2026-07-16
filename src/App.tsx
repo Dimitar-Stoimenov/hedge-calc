@@ -10,6 +10,7 @@ import {
   type MarketType,
 } from './calc';
 import { fmtCents, fmtMoneyEur, fmtPct, fmtShares, fmtUsd } from './format';
+import { parseNum } from './parse';
 
 const MARKET_LABELS: Record<MarketType, string> = {
   sports: 'Sports',
@@ -21,13 +22,6 @@ const MARKET_LABELS: Record<MarketType, string> = {
 
 // Fixed stake rows plus one custom row.
 const FIXED_STAKES = [10, 20];
-
-/** Parse a text input to a finite number, or null if blank/invalid. */
-function num(s: string): number | null {
-  if (s.trim() === '') return null;
-  const n = Number(s);
-  return Number.isFinite(n) ? n : null;
-}
 
 interface CalcInputs {
   odds: number;
@@ -86,10 +80,10 @@ export default function App() {
   const [customStr, setCustomStr] = useState('50');
   const [advOpen, setAdvOpen] = useState(false);
 
-  const odds = num(oddsStr);
-  const noPrice = num(noStr);
-  const xe = num(xeStr);
-  const custom = num(customStr);
+  const odds = parseNum(oddsStr);
+  const noPrice = parseNum(noStr);
+  const xe = parseNum(xeStr);
+  const custom = parseNum(customStr);
   const feeRate = FEE_RATES[market];
 
   // Validation — gentle hints, never crash.
@@ -157,10 +151,9 @@ export default function App() {
           <label className="field">
             <span className="field-label">Boost odds</span>
             <input
-              type="number"
+              type="text"
               inputMode="decimal"
-              step="0.01"
-              min="1"
+              autoComplete="off"
               value={oddsStr}
               onChange={(e) => setOddsStr(e.target.value)}
               placeholder="2.55"
@@ -170,11 +163,9 @@ export default function App() {
           <label className="field">
             <span className="field-label">Polymarket NO (¢)</span>
             <input
-              type="number"
+              type="text"
               inputMode="decimal"
-              step="0.1"
-              min="0"
-              max="100"
+              autoComplete="off"
               value={noStr}
               onChange={(e) => setNoStr(e.target.value)}
               placeholder="50"
@@ -237,10 +228,9 @@ export default function App() {
             <label className="field">
               <span className="field-label">EUR → USD rate</span>
               <input
-                type="number"
+                type="text"
                 inputMode="decimal"
-                step="0.001"
-                min="0"
+                autoComplete="off"
                 value={xeStr}
                 onChange={(e) => setXeStr(e.target.value)}
                 placeholder="1.146"
@@ -304,10 +294,9 @@ export default function App() {
                 <td className="col-stake">
                   <span className="euro-prefix">€</span>
                   <input
-                    type="number"
+                    type="text"
                     inputMode="decimal"
-                    step="1"
-                    min="0"
+                    autoComplete="off"
                     value={customStr}
                     onChange={(e) => setCustomStr(e.target.value)}
                     placeholder="custom"

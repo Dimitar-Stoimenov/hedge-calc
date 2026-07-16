@@ -64,4 +64,21 @@ describe('App (default Example-A inputs)', () => {
     const results = h.slice(h.indexOf('class="results"'));
     expect(results).not.toMatch(/[−-]€/);
   });
+
+  it('numeric inputs use type=text + inputmode=decimal (mobile comma-key fix)', () => {
+    // type="number" makes some mobile browsers reject/clear a comma decimal.
+    // Every data input must be type=text with inputmode=decimal so the numeric
+    // keypad still shows but the browser stops fighting the separator.
+    const inputs = h.match(/<input[^>]*>/g) ?? [];
+    // React preserves the camelCase property name (inputMode) in the markup.
+    const decimals = inputs.filter((t) => /inputmode="decimal"/i.test(t));
+    // odds, NO price, custom stake are always rendered (XE is behind Advanced).
+    expect(decimals.length).toBeGreaterThanOrEqual(3);
+    for (const t of decimals) {
+      expect(t).toMatch(/type="text"/);
+      expect(t).not.toMatch(/type="number"/);
+    }
+    // and there should be no leftover type=number anywhere
+    expect(h).not.toMatch(/type="number"/);
+  });
 });
