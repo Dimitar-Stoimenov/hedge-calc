@@ -1,0 +1,92 @@
+:root {
+  --text: #4b5563;
+  --text-h: #08060d;
+  --text-dim: #8a8f98;
+  --bg: #f6f7f9;
+  --card: #ffffff;
+  --border: #e2e4e9;
+  --field-bg: #ffffff;
+  --field-border: #d2d5dc;
+
+  --accent: #6d28d9;
+  --accent-bg: rgba(109, 40, 217, 0.08);
+
+  --lock: #15803d;
+  --lock-bg: #dcfce7;
+  --lock-border: #86efac;
+  --dead: #b91c1c;
+  --dead-bg: #fee2e2;
+  --dead-border: #fca5a5;
+  --warn: #92600a;
+
+  --shadow: rgba(16, 24, 40, 0.08) 0 4px 12px -2px,
+    rgba(16, 24, 40, 0.04) 0 2px 4px -1px;
+
+  --sans: system-ui, 'Segoe UI', Roboto, -apple-system, sans-serif;
+  --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.45;
+  color-scheme: light dark;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --text: #b6bcc6;
+    --text-h: #f3f4f6;
+    --text-dim: #7f8592;
+    --bg: #0f1014;
+    --card: #191a20;
+    --border: #2a2c35;
+    --field-bg: #101116;
+    --field-border: #34363f;
+
+    --accent: #c084fc;
+    --accent-bg: rgba(192, 132, 252, 0.12);
+
+    --lock: #4ade80;
+    --lock-bg: rgba(22, 101, 52, 0.28);
+    --lock-border: rgba(74, 222, 128, 0.45);
+    --dead: #f87171;
+    --dead-bg: rgba(153, 27, 27, 0.28);
+    --dead-border: rgba(248, 113, 113, 0.45);
+    --warn: #fcd34d;
+
+    --shadow: rgba(0, 0, 0, 0.5) 0 4px 14px -2px,
+      rgba(0, 0, 0, 0.3) 0 2px 4px -1px;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100svh;
+}
+
+h1,
+h2,
+h3 {
+  color: var(--text-h);
+  font-weight: 600;
+  margin: 0;
+}
+
+button {
+  font-family: inherit;
+}
+
+/* iOS: don't zoom the page when focusing an input (needs >=16px font). */
+input,
+select {
+  font-family: inherit;
+  font-size: 16px;
+}
