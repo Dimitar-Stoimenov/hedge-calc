@@ -12,6 +12,14 @@
 /** The lock threshold. odds * (1 - pEff) must clear this to be a "lock". */
 export const LOCK_THRESHOLD = 1.005;
 
+/**
+ * Default EUR → USD exchange rate the UI pre-fills (editable under Advanced).
+ * A single source of truth — the app state and its placeholder both read this,
+ * so bumping the rate here is the only change needed. Pure-math tests pass their
+ * own xe and do NOT depend on this value.
+ */
+export const DEFAULT_XE = 1.1376;
+
 export type MarketType =
   | 'sports'
   | 'politics'

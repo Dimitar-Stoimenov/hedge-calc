@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import './App.css';
 import {
+  DEFAULT_XE,
   FEE_RATES,
   MARKET_TYPES,
   breakevenNo,
@@ -76,7 +77,7 @@ export default function App() {
   const [market, setMarket] = useState<MarketType>('sports');
   const [isMaker, setIsMaker] = useState(false);
   const [isFreeBet, setIsFreeBet] = useState(false);
-  const [xeStr, setXeStr] = useState('1.146');
+  const [xeStr, setXeStr] = useState(String(DEFAULT_XE));
   const [customStr, setCustomStr] = useState('50');
   const [advOpen, setAdvOpen] = useState(false);
 
@@ -233,7 +234,7 @@ export default function App() {
                 autoComplete="off"
                 value={xeStr}
                 onChange={(e) => setXeStr(e.target.value)}
-                placeholder="1.146"
+                placeholder={String(DEFAULT_XE)}
               />
             </label>
           )}
