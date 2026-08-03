@@ -18,11 +18,11 @@ describe('App (default Example-A inputs)', () => {
     expect(h).not.toMatch(/DEAD/);
   });
 
-  it('shows €20 shares = 58.02 and €10 shares = 29.01', () => {
-    // App default XE = DEFAULT_XE (1.1376): 20*2.55*1.1376 = 58.0176 -> 58.02 ;
-    // 10*2.55*1.1376 = 29.0088 -> 29.01
-    expect(h).toMatch(/58\.02/);
-    expect(h).toMatch(/29\.01/);
+  it('shows €20 shares = 58.76 and €10 shares = 29.38', () => {
+    // App default XE = DEFAULT_XE (1.15224): 20*2.55*1.15224 = 58.76424 -> 58.76 ;
+    // 10*2.55*1.15224 = 29.38212 -> 29.38
+    expect(h).toMatch(/58\.76/);
+    expect(h).toMatch(/29\.38/);
   });
 
   it('shows USD hedge costs and a positive net profit', () => {
@@ -50,8 +50,8 @@ describe('App (default Example-A inputs)', () => {
     expect(h).toMatch(/>€20</);
     // custom row carries an input defaulted to 50
     expect(h).toMatch(/aria-label="Custom stake in euros"[^>]*value="50"/);
-    // custom €50 shares: 50*2.55*1.1376 = 145.044 -> 145.04
-    expect(h).toMatch(/145\.04/);
+    // custom €50 shares: 50*2.55*1.15224 = 146.9106 -> 146.91
+    expect(h).toMatch(/146\.91/);
   });
 
   it('shows the Taker segment active and defaults market to Sports', () => {
