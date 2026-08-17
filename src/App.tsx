@@ -8,6 +8,8 @@ import {
   lockTest,
   sizePosition,
   effectivePrice,
+  voidTail,
+  VOID_WATCH_PRICE_CENTS,
   type MarketType,
 } from './calc';
 import { fmtCents, fmtMoneyEur, fmtPct, fmtShares, fmtUsd } from './format';
@@ -39,6 +41,7 @@ function ResultCells({ inputs, stake }: { inputs: CalcInputs; stake: number }) {
   const { odds, noPrice, feeRate, isMaker, isFreeBet, xe, isLock } = inputs;
   const [copied, setCopied] = useState(false);
   const r = sizePosition({ odds, noPrice, feeRate, isMaker, isFreeBet, xe, stake });
+  const tail = voidTail(r, stake, xe);
 
   async function copyShares() {
     try {
@@ -66,6 +69,11 @@ function ResultCells({ inputs, stake }: { inputs: CalcInputs; stake: number }) {
       <td className="col-cost mono">{fmtUsd(r.hedgeCostUsd)}</td>
       <td className={`col-profit mono ${r.lockProfit >= 0 ? 'pos' : 'neg'}`}>
         {fmtMoneyEur(r.lockProfit)}
+      </td>
+      {/* What a VOID does to this stake, signed like a P&L: NEGATIVE = it costs you
+          (the usual case above 50¢), positive = it pays you. See calc.voidTail. */}
+      <td className={`col-void mono ${tail.tailEur > 0 ? 'neg' : 'pos'}`}>
+        {fmtMoneyEur(-tail.tailEur)}
       </td>
     </>
   );
@@ -132,7 +140,14 @@ export default function App() {
           .hedgeCostUsd > 50,
     );
 
-    return { pEff, lock, breakeven, inputs, bigOrder };
+    // VOID TAIL — both headline numbers are STAKE-INDEPENDENT (lock and tail scale
+    // linearly with stake, so the multiple and the breakeven ratio don't move), which is
+    // why they belong in the verdict rather than the per-stake table. Computed off a
+    // €1 probe purely to reach `voidTail`; the EUR column in the table is per row.
+    const probe = sizePosition({ odds: o, noPrice: n, feeRate, isMaker, isFreeBet, xe: x, stake: 1 });
+    const tail = voidTail(probe, 1, x);
+
+    return { pEff, lock, breakeven, inputs, bigOrder, tail };
   }, [inputsReady, odds, noPrice, feeRate, isMaker, isFreeBet, xe, custom]);
 
   const takerMaker = isMaker ? 'maker' : 'taker';
@@ -269,6 +284,33 @@ export default function App() {
             Profitable if NO ≤ <strong>{fmtCents(view.breakeven)}¢</strong> (
             {takerMaker})
           </p>
+          {/* VOID TAIL — a void resolves the market 50-50, so the hedge leg alone decides
+              it and the LOCK % above says nothing about the damage. Both figures here are
+              stake-independent, so one line covers every row of the table. */}
+          <p
+            className={`void-tail ${
+              view.tail.tailEur > 0 && noPrice !== null && noPrice > VOID_WATCH_PRICE_CENTS
+                ? 'void-warn'
+                : ''
+            }`}
+          >
+            {view.tail.tailEur > 0 ? (
+              <>
+                Void tail <strong>{fmtPct(view.tail.tailPerStake, 2)}× stake</strong>
+                {view.tail.breakevenVoidProb !== null && (
+                  <>
+                    {' — '}−EV if void chance &gt;{' '}
+                    <strong>{fmtPct(view.tail.breakevenVoidProb * 100)}%</strong>
+                  </>
+                )}
+              </>
+            ) : (
+              <>
+                Void <strong>pays</strong> {fmtPct(-view.tail.tailPerStake, 2)}× stake — hedge
+                bought under 50¢
+              </>
+            )}
+          </p>
         </section>
       )}
 
@@ -282,6 +324,7 @@ export default function App() {
                 <th>Shares</th>
                 <th>Hedge cost</th>
                 <th>Net profit</th>
+                <th>Void tail</th>
               </tr>
             </thead>
             <tbody>
@@ -308,6 +351,7 @@ export default function App() {
                   <ResultCells inputs={view.inputs} stake={custom} />
                 ) : (
                   <>
+                    <td className="dim">—</td>
                     <td className="dim">—</td>
                     <td className="dim">—</td>
                     <td className="dim">—</td>

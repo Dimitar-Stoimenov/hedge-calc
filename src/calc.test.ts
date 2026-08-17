@@ -8,6 +8,8 @@ import {
   lockTest,
   breakevenNo,
   sizePosition,
+  voidTail,
+  DEFAULT_XE,
   type MarketType,
 } from './calc';
 
@@ -465,5 +467,105 @@ describe('breakevenNo properties', () => {
     expect(breakevenNo(1.0001, FEE_RATES.crypto, false)).toBeGreaterThanOrEqual(0);
     expect(breakevenNo(1e6, FEE_RATES.crypto, false)).toBeLessThanOrEqual(100);
     expect(breakevenNo(1e6, FEE_RATES.geopolitics, true)).toBeLessThanOrEqual(100);
+  });
+});
+
+// ── VOID TAIL ────────────────────────────────────────────────────────────────────
+// A voided Poly market resolves 50-50, so the hedge leg alone decides the outcome:
+// you keep $0.50/share against whatever you paid. The headline LOCK % says nothing
+// about this, which is the whole point of surfacing it.
+describe('voidTail', () => {
+  // The five REAL BOOKED positions (user 2026-08-17). Prices are the NET price paid
+  // (cost ÷ shares), so they go in as pEff — i.e. MAKER + zero fee here, otherwise
+  // the fee would be applied twice. `booked` is the actual P&L observed on the void.
+  const POSITIONS = [
+    { name: 'RMD Gaming', stake: 10, odds: 11.0, price: 89.5, booked: 43.46 },
+    { name: 'Vitality Academy', stake: 30.5, odds: 4.5, price: 63.6, booked: 18.66 },
+    { name: 'Bencic-Gauff', stake: 33.16, odds: 2.8, price: 61.2, booked: 10.42 },
+    { name: 'BESTIA Academy', stake: 35, odds: 1.54, price: 34.1, booked: -8.57 },
+    { name: 'Forsaken', stake: 100, odds: 1.41, price: 27.7, booked: -31.44 },
+  ];
+
+  it.each(POSITIONS)('matches the booked void P&L for $name', ({ stake, odds, price, booked }) => {
+    const size = sizePosition({
+      odds, noPrice: price, feeRate: 0, isMaker: true, isFreeBet: false,
+      xe: DEFAULT_XE, stake,
+    });
+    // within a cent of what was actually booked
+    expect(voidTail(size, stake, DEFAULT_XE).tailEur).toBeCloseTo(booked, 1);
+  });
+
+  it('THE EXCHANGE RATE CANCELS — the tail is identical at any xe', () => {
+    const at = (xe: number) => {
+      const size = sizePosition({
+        odds: 11, noPrice: 89.5, feeRate: 0, isMaker: true, isFreeBet: false, xe, stake: 10,
+      });
+      return voidTail(size, 10, xe).tailEur;
+    };
+    expect(at(1.15224)).toBeCloseTo(at(1), 10);
+    expect(at(1.15224)).toBeCloseTo(at(2.5), 10);
+    expect(at(1)).toBeCloseTo(43.45, 2); // stake × odds × (price − 0.50)
+  });
+
+  it('a hedge bought BELOW 50¢ means a void PAYS you (negative tail)', () => {
+    const size = sizePosition({
+      odds: 1.41, noPrice: 27.7, feeRate: 0, isMaker: true, isFreeBet: false,
+      xe: DEFAULT_XE, stake: 100,
+    });
+    const t = voidTail(size, 100, DEFAULT_XE);
+    expect(t.tailEur).toBeLessThan(0);
+    // …and then there is no breakeven void probability at all: a void can't hurt you
+    expect(t.breakevenVoidProb).toBeNull();
+  });
+
+  it('tailPerStake is the multiple of stake, and is stake-INDEPENDENT', () => {
+    const mk = (stake: number) => {
+      const size = sizePosition({
+        odds: 11, noPrice: 89.5, feeRate: 0, isMaker: true, isFreeBet: false,
+        xe: DEFAULT_XE, stake,
+      });
+      return voidTail(size, stake, DEFAULT_XE);
+    };
+    expect(mk(10).tailPerStake).toBeCloseTo(11 * (0.895 - 0.5), 6); // 4.345× — the RMD shape
+    expect(mk(250).tailPerStake).toBeCloseTo(mk(10).tailPerStake, 10);
+  });
+
+  it('breakevenVoidProb = LOCK / (LOCK + TAIL), and is stake-INDEPENDENT', () => {
+    const mk = (stake: number) => {
+      const size = sizePosition({
+        odds: 11, noPrice: 89.5, feeRate: FEE_RATES.sports, isMaker: false,
+        isFreeBet: false, xe: DEFAULT_XE, stake,
+      });
+      return { t: voidTail(size, stake, DEFAULT_XE), lock: size.lockProfit };
+    };
+    const { t, lock } = mk(10);
+    expect(t.breakevenVoidProb).toBeCloseTo(lock / (lock + t.tailEur), 10);
+    expect(mk(500).t.breakevenVoidProb!).toBeCloseTo(t.breakevenVoidProb!, 10);
+    // EV check: at exactly the breakeven void chance the position is a coin-flip on EV
+    const q = t.breakevenVoidProb!;
+    expect(lock * (1 - q) - t.tailEur * q).toBeCloseTo(0, 10);
+  });
+
+  it('a DEAD position has no breakeven void probability (already −EV without a void)', () => {
+    const size = sizePosition({
+      odds: 1.05, noPrice: 89.5, feeRate: FEE_RATES.sports, isMaker: false,
+      isFreeBet: false, xe: DEFAULT_XE, stake: 10,
+    });
+    expect(size.lockProfit).toBeLessThan(0);
+    expect(voidTail(size, 10, DEFAULT_XE).breakevenVoidProb).toBeNull();
+  });
+
+  it('uses the NET price paid (fee included) — a taker tail exceeds the raw-price tail', () => {
+    const common = { odds: 11, noPrice: 89.5, isFreeBet: false, xe: DEFAULT_XE, stake: 10 };
+    const taker = sizePosition({ ...common, feeRate: FEE_RATES.sports, isMaker: false });
+    const maker = sizePosition({ ...common, feeRate: FEE_RATES.sports, isMaker: true });
+    expect(voidTail(taker, 10, DEFAULT_XE).tailEur)
+      .toBeGreaterThan(voidTail(maker, 10, DEFAULT_XE).tailEur);
+  });
+
+  it('a FREE BET sizes its tail on (odds − 1), like its hedge', () => {
+    const common = { odds: 11, noPrice: 89.5, feeRate: 0, isMaker: true, xe: DEFAULT_XE, stake: 10 };
+    const fb = sizePosition({ ...common, isFreeBet: true });
+    expect(voidTail(fb, 10, DEFAULT_XE).tailEur).toBeCloseTo(10 * (11 - 1) * (0.895 - 0.5), 6);
   });
 });

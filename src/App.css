@@ -191,6 +191,23 @@ select:focus {
 .breakeven strong {
   color: var(--text-h);
 }
+/* Void-tail line: same footnote weight as .breakeven, but it goes amber once the hedge
+   is dear enough that a void really bites (> VOID_WATCH_PRICE_CENTS) — the "look at this
+   before firing" cue. */
+.void-tail {
+  margin: 2px 0 0;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+.void-tail strong {
+  color: var(--text-h);
+}
+.void-tail.void-warn {
+  color: #d99a2b;
+}
+.void-tail.void-warn strong {
+  color: #f0b849;
+}
 
 /* ---- Results table ---- */
 .results {
@@ -236,6 +253,20 @@ select:focus {
 .col-profit.neg {
   color: var(--dead);
   font-weight: 700;
+}
+/* VOID TAIL — deliberately quieter than net profit: it is a risk footnote, not the
+   headline. Only its sign is coloured, and lighter than the lock/dead pair so a big
+   red tail can't be mistaken for a DEAD verdict. */
+.col-void {
+  color: var(--text-dim);
+}
+.col-void.neg {
+  color: var(--dead);
+  opacity: 0.85;
+}
+.col-void.pos {
+  color: var(--lock);
+  opacity: 0.85;
 }
 .row-dead td {
   opacity: 0.55;

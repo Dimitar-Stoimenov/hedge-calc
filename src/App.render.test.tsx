@@ -59,11 +59,18 @@ describe('App (default Example-A inputs)', () => {
     expect(h).toMatch(/<option value="sports" selected[^>]*>Sports/);
   });
 
-  it('uses a real U+2212 minus sign nowhere-positive default (no ASCII hyphen in money)', () => {
-    // All default figures are positive here, so there should be no minus at all
-    // in the results section — guards against a stray hyphen from a formatter.
+  it('uses a real U+2212 minus sign, never an ASCII hyphen, in money', () => {
     const results = h.slice(h.indexOf('class="results"'));
-    expect(results).not.toMatch(/[−-]€/);
+    // The PROFIT/COST figures are all positive at the default inputs, so no minus
+    // may appear on them — guards against a stray hyphen from a formatter.
+    for (const cell of results.match(/class="col-profit[^"]*">[^<]*/g) ?? []) {
+      expect(cell).not.toMatch(/[−-]€/);
+    }
+    // The VOID TAIL is legitimately negative here (2026-08-17): at a 50¢ book the
+    // TAKER FEE lifts the net price paid above 50¢, so a void costs a little —
+    // 10 × 2.55 × (0.5125 − 0.50) = €0.32. What matters is the character used.
+    expect(results).toMatch(/class="col-void[^"]*">−€0\.32/);
+    expect(results).not.toMatch(/-€/); // ASCII hyphen: never
   });
 
   it('numeric inputs use type=text + inputmode=decimal (mobile comma-key fix)', () => {
@@ -81,5 +88,31 @@ describe('App (default Example-A inputs)', () => {
     }
     // and there should be no leftover type=number anywhere
     expect(h).not.toMatch(/type="number"/);
+  });
+});
+
+// ── VOID TAIL (2026-08-17) ───────────────────────────────────────────────────────
+// A void resolves the market 50-50, so the hedge leg alone decides it — the LOCK %
+// above says nothing about that damage. Both verdict figures are stake-independent
+// (lock and tail scale together), which is why one line covers the whole table.
+describe('void tail (default Example-A inputs: 2.55 @ 50¢, sports taker)', () => {
+  const h = html();
+
+  it('shows the tail as a multiple of stake and the breakeven void chance', () => {
+    // pEff = 0.50 + 5%·0.50·0.50 = 0.5125, so even a 50¢ book carries a small tail:
+    // multiple = 2.55 × 0.0125 = 0.031875 → "0.03× stake".
+    expect(h).toMatch(/Void tail <strong>0\.03× stake<\/strong>/);
+    expect(h).toMatch(/−EV if void chance &gt; <strong>8\d\.\d%<\/strong>/);
+  });
+
+  it('does NOT flag the amber watch state at 50¢ (only above 60¢)', () => {
+    expect(h).toMatch(/class="void-tail "/);
+    expect(h).not.toMatch(/void-warn/);
+  });
+
+  it('adds a Void tail column to the results table', () => {
+    expect(h).toMatch(/<th>Void tail<\/th>/);
+    // signed like a P&L: a void COSTS €0.32 on the €10 row → shown negative
+    expect(h).toMatch(/class="col-void mono neg">−€0\.32/);
   });
 });
