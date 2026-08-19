@@ -1,22 +1,21 @@
 import { useEffect, useState } from 'react';
 import { DEFAULT_XE } from './calc';
-import { fetchEurUsd, fxMessage, type FxResult } from './fx';
+import { fetchEurUsd, fxRateText, tidyAsOf, type FxResult } from './fx';
 
 /**
- * FX rate toast — fetches EUR→USD once on mount, applies it, and reports what happened.
+ * FX rate toast — fetches EUR→USD once on mount, applies it, and shows just the number.
  *
- * BEHAVIOUR (user 2026-08-19): "call it once on page load and put a toaster to tell us to
- * update it. toaster to be permanent top right, unless we click x on it. it should be copiable,
- * so i can directly take and copy into claude or whatever i need it for."
- *  - fetched ONCE per page load, never polled;
- *  - pinned top-right and PERSISTENT — no auto-dismiss timer, only the × closes it;
- *  - the message is selectable text PLUS a one-click copy, because its job is to be pasted
- *    somewhere else;
- *  - on total failure the calculator keeps DEFAULT_XE and the toast says so, so a silent
- *    fallback to a hardcoded constant can never look like a live rate.
+ * BEHAVIOUR (user 2026-08-19): fetched ONCE per page load, never polled; pinned top-right with
+ * NO auto-dismiss timer, so only the × closes it; the rate is selectable text and Copy puts
+ * **only the number** on the clipboard ("only XE and on copy i want the number copied only") —
+ * the earlier version copied a whole explanatory sentence, which is useless for pasting a value
+ * into another tool.
+ *
+ * On a failed lookup the calculator keeps DEFAULT_XE, the toast says `default`, and Copy yields
+ * that same default — so the number on screen is always the one the maths is using.
  */
 export function FxToast({ onRate }: { onRate: (rate: number) => void }) {
-  const [msg, setMsg] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
   const [result, setResult] = useState<FxResult | null>(null);
   const [closed, setClosed] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -26,39 +25,48 @@ export function FxToast({ onRate }: { onRate: (rate: number) => void }) {
     void fetchEurUsd().then((r) => {
       if (!live) return;
       setResult(r);
-      setMsg(fxMessage(r, DEFAULT_XE));
+      setDone(true);
       // Apply ONLY a real rate. A failed lookup leaves the field on DEFAULT_XE.
       if (r) onRate(r.rate);
     });
     return () => { live = false; };
-    // Mount-only on purpose: this is a page-load lookup, not a subscription. `onRate` is a
-    // stable setter from the parent, so leaving it out cannot capture a stale value that
-    // matters — and including it would re-fetch on every parent render.
+    // Mount-only on purpose: a page-load lookup, not a subscription. Including `onRate` would
+    // re-fetch on every parent render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (closed || !msg) return null;
+  if (closed || !done) return null;
+
+  const rate = fxRateText(result, DEFAULT_XE);
 
   const copy = () => {
     // navigator.clipboard needs a secure context; the textarea fallback keeps copy working on
-    // plain http (and in older browsers) rather than failing silently.
-    const done = () => { setCopied(true); setTimeout(() => setCopied(false), 1500); };
+    // plain http and in older browsers rather than failing silently.
+    const ok = () => { setCopied(true); setTimeout(() => setCopied(false), 1500); };
     if (navigator.clipboard?.writeText) {
-      void navigator.clipboard.writeText(msg).then(done).catch(() => fallbackCopy(msg, done));
+      void navigator.clipboard.writeText(rate).then(ok).catch(() => fallbackCopy(rate, ok));
     } else {
-      fallbackCopy(msg, done);
+      fallbackCopy(rate, ok);
     }
   };
 
   return (
     <div className={`fx-toast ${result ? '' : 'fx-toast-warn'}`} role="status" aria-live="polite">
       <div className="fx-toast-head">
-        <strong>{result ? 'Exchange rate applied' : 'Exchange rate unavailable'}</strong>
+        <strong>EUR→USD</strong>
         <button className="fx-toast-x" onClick={() => setClosed(true)} aria-label="Dismiss" title="Dismiss">×</button>
       </div>
-      {/* user-select is forced on in CSS — the message exists to be copied out */}
-      <p className="fx-toast-msg">{msg}</p>
-      <button className="fx-toast-copy" onClick={copy}>{copied ? 'Copied' : 'Copy'}</button>
+      <div className="fx-toast-row">
+        {/* user-select is forced on in CSS — the number is here to be taken */}
+        <span className="fx-toast-rate mono">{rate}</span>
+        <button className="fx-toast-copy" onClick={copy}>{copied ? 'Copied' : 'Copy'}</button>
+      </div>
+      {/* Provenance stays OUT of the copied string: a one-line hint, not part of the value. */}
+      <p className="fx-toast-src">
+        {result
+          ? `${result.source}${result.asOf ? ` · ${tidyAsOf(result.asOf)}` : ''}`
+          : 'default — live rate unavailable'}
+      </p>
     </div>
   );
 }

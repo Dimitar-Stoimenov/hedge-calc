@@ -381,13 +381,26 @@ select:focus {
 .fx-toast-x:hover {
   color: var(--text);
 }
-.fx-toast-msg {
-  margin: 0 0 8px;
-  color: var(--text-dim);
+.fx-toast-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+/* The rate itself — the only thing Copy puts on the clipboard, so it reads as the value. */
+.fx-toast-rate {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
   /* selectable even if a global reset disables selection elsewhere */
   user-select: text;
   -webkit-user-select: text;
-  overflow-wrap: anywhere;
+}
+/* Provenance line — deliberately small and NOT part of the copied string. */
+.fx-toast-src {
+  margin: 4px 0 0;
+  font-size: 10px;
+  color: var(--text-dim);
 }
 .fx-toast-copy {
   background: var(--accent-bg);

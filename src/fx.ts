@@ -119,22 +119,18 @@ export async function fetchEurUsd(
 }
 
 /**
- * The toast text. Deliberately ONE self-contained line that reads correctly on its own, since
- * the whole point is that it gets copied out of here and pasted somewhere else.
+ * The rate string — shown in the toast AND copied verbatim.
+ *
+ * ONE NUMBER, NOTHING ELSE (user 2026-08-19: "dont need this huge meesage. only XE and on copy
+ * i want the number copied only"). An earlier version copied a full explanatory sentence, which
+ * is useless when the point is to paste the value straight into another tool.
+ *
+ * On failure this is the DEFAULT, so the copy button always yields the rate the calculator is
+ * actually using — never a stale live value.
  */
-export function fxMessage(result: FxResult | null, fallback: number): string {
-  if (!result) {
-    return `EUR→USD: could not fetch a live rate — using the built-in default ${fallback}. `
-      + `Check xe.com and update the rate under Advanced.`;
-  }
-  // Sources report the timestamp in different shapes: fxratesapi sends a full ISO instant
-  // ("2026-08-19T13:40:00.000Z"), Frankfurter a bare date. Normalise to "YYYY-MM-DD HH:MM UTC"
-  // (or just the date) — this line gets pasted elsewhere, so it should read cleanly.
-  const asOf = result.asOf ? `, as of ${tidyAsOf(result.asOf)}` : '';
-  return `EUR→USD = ${result.rate} (${result.source}${asOf}). Applied. `
-    + `xe.com is the quoted source and can differ ~0.0-0.7%; verify there and update under Advanced if it matters.`;
+export function fxRateText(result: FxResult | null, fallback: number): string {
+  return String(result ? result.rate : fallback);
 }
-
 /** "2026-08-19T13:40:00.000Z" → "2026-08-19 13:40 UTC"; a bare date passes through. */
 export function tidyAsOf(raw: string): string {
   const iso = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/.exec(raw);

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { fetchEurUsd, fxMessage, FX_SOURCES, tidyAsOf } from './fx';
+import { fetchEurUsd, fxRateText, FX_SOURCES, tidyAsOf } from './fx';
 import { DEFAULT_XE } from './calc';
 
 /**
@@ -68,19 +68,26 @@ describe('fetchEurUsd', () => {
   });
 });
 
-describe('fxMessage', () => {
-  it('names the rate, the source and the date, in one copiable line', () => {
-    const m = fxMessage({ rate: 1.16558928, source: 'fxratesapi (live)', asOf: '2026-08-19' }, DEFAULT_XE);
-    expect(m).toContain('1.16558928');
-    expect(m).toContain('fxratesapi (live)');
-    expect(m).toContain('2026-08-19');
-    expect(m).toContain('xe.com');
+describe('fxRateText', () => {
+  it('is the rate and NOTHING else — this string is what Copy puts on the clipboard', () => {
+    expect(fxRateText({ rate: 1.16558928, source: 'fxratesapi (live)', asOf: '2026-08-19' }, DEFAULT_XE))
+      .toBe('1.16558928');
   });
 
-  it('on failure says the DEFAULT is in use and names it — no silent fallback', () => {
-    const m = fxMessage(null, DEFAULT_XE);
-    expect(m).toContain(String(DEFAULT_XE));
-    expect(m).toMatch(/could not fetch/i);
+  it('carries FULL precision, not a rounded display value', () => {
+    expect(fxRateText({ rate: 1.165365145, source: 's' }, DEFAULT_XE)).toBe('1.165365145');
+  });
+
+  it('falls back to the DEFAULT on failure, so Copy always yields the rate in use', () => {
+    // Never a stale live value: what is copied must equal what the calculator is computing with.
+    expect(fxRateText(null, DEFAULT_XE)).toBe(String(DEFAULT_XE));
+  });
+
+  it('contains no words, punctuation or whitespace to strip after pasting', () => {
+    for (const t of [fxRateText({ rate: 1.165, source: 'x' }, DEFAULT_XE), fxRateText(null, DEFAULT_XE)]) {
+      expect(t).toMatch(/^[0-9]+\.?[0-9]*$/);
+      expect(Number.isFinite(Number(t))).toBe(true);
+    }
   });
 });
 
@@ -214,29 +221,5 @@ describe('tidyAsOf — more shapes', () => {
     ['garbage', 'garbage'],
   ])('%s → %s', (raw, want) => {
     expect(tidyAsOf(raw)).toBe(want);
-  });
-});
-
-describe('fxMessage — copiability', () => {
-  it('is a SINGLE line (it gets pasted into a chat box)', () => {
-    const m = fxMessage({ rate: 1.165, source: 'fxratesapi (live)', asOf: '2026-08-19' }, DEFAULT_XE);
-    expect(m).not.toContain('\n');
-    expect(fxMessage(null, DEFAULT_XE)).not.toContain('\n');
-  });
-
-  it('states the full precision of the rate, not a rounded display value', () => {
-    // The point of copying it is to paste the exact number elsewhere.
-    expect(fxMessage({ rate: 1.165365145, source: 's' }, DEFAULT_XE)).toContain('1.165365145');
-  });
-
-  it('omits the as-of clause entirely when the source gives no date', () => {
-    const m = fxMessage({ rate: 1.165, source: 'Coinbase (live)' }, DEFAULT_XE);
-    expect(m).not.toMatch(/as of/);
-    expect(m).toContain('Coinbase (live)');
-  });
-
-  it('always points at xe.com as the quoted source, success or failure', () => {
-    expect(fxMessage({ rate: 1.165, source: 's' }, DEFAULT_XE)).toContain('xe.com');
-    expect(fxMessage(null, DEFAULT_XE)).toContain('xe.com');
   });
 });

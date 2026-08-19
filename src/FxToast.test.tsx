@@ -4,7 +4,7 @@ import { render, screen, cleanup, waitFor, act, fireEvent } from '@testing-libra
 import userEvent from '@testing-library/user-event';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { FxToast } from './FxToast';
-import { fxMessage } from './fx';
+import { fxRateText } from './fx';
 import { DEFAULT_XE } from './calc';
 import App from './App';
 
@@ -42,27 +42,26 @@ describe('FxToast — success path', () => {
   it('shows the applied title, the rate, the source and the date', async () => {
     vi.stubGlobal('fetch', okRate(RATE, '2026-08-19T13:40:00.000Z'));
     render(<FxToast onRate={() => {}} />);
-    expect(await screen.findByText(/Exchange rate applied/i)).toBeTruthy();
-    const msg = (await screen.findByText(/EUR→USD =/)).textContent ?? '';
-    expect(msg).toContain(String(RATE));
-    expect(msg).toContain('fxratesapi');
-    expect(msg).toContain('2026-08-19 13:40 UTC'); // tidied, not raw ISO
-    expect(msg).toContain('xe.com');
+    expect(await screen.findByText('EUR→USD')).toBeTruthy();
+    // the rate stands alone; provenance is a separate, smaller line and is NOT copied
+    expect(await screen.findByText(String(RATE))).toBeTruthy();
+    expect(screen.getByText(/fxratesapi/)).toBeTruthy();
+    expect(screen.getByText(/2026-08-19 13:40 UTC/)).toBeTruthy(); // tidied, not raw ISO
   });
 
-  it('the rendered message is EXACTLY what fxMessage produces (what gets copied)', async () => {
+  it('the displayed number is EXACTLY fxRateText — i.e. exactly what Copy yields', async () => {
     vi.stubGlobal('fetch', okRate(RATE, '2026-08-19'));
-    render(<FxToast onRate={() => {}} />);
-    const el = await screen.findByText(/EUR→USD =/);
-    expect(el.textContent).toBe(
-      fxMessage({ rate: RATE, source: 'fxratesapi (live)', asOf: '2026-08-19' }, DEFAULT_XE),
-    );
+    const { container } = render(<FxToast onRate={() => {}} />);
+    await screen.findByText('EUR→USD');
+    const shown = container.querySelector('.fx-toast-rate')?.textContent;
+    expect(shown).toBe(fxRateText({ rate: RATE, source: 'fxratesapi (live)' }, DEFAULT_XE));
+    expect(shown).toBe(String(RATE));
   });
 
   it('is NOT styled as a warning on success', async () => {
     vi.stubGlobal('fetch', okRate());
     const { container } = render(<FxToast onRate={() => {}} />);
-    await screen.findByText(/Exchange rate applied/i);
+    await screen.findByText('EUR→USD');
     expect(container.querySelector('.fx-toast')).toBeTruthy();
     expect(container.querySelector('.fx-toast-warn')).toBeNull();
   });
@@ -76,7 +75,7 @@ describe('FxToast — success path', () => {
     const onRate = vi.fn();
     render(<FxToast onRate={onRate} />);
     await waitFor(() => expect(onRate).toHaveBeenCalledWith(1.16543735));
-    expect((await screen.findByText(/EUR→USD =/)).textContent).toContain('Coinbase (live)');
+    expect(await screen.findByText(/Coinbase \(live\)/)).toBeTruthy();
   });
 });
 
@@ -85,22 +84,21 @@ describe('FxToast — failure path (the dangerous one)', () => {
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('offline'); }));
     const onRate = vi.fn();
     render(<FxToast onRate={onRate} />);
-    await screen.findByText(/Exchange rate unavailable/i);
+    await screen.findByText(/live rate unavailable/i);
     expect(onRate).not.toHaveBeenCalled();
   });
 
-  it('names the default that is being used instead — no silent fallback', async () => {
+  it('SHOWS the default it fell back to — no silent fallback', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('offline'); }));
-    render(<FxToast onRate={() => {}} />);
-    const msg = (await screen.findByText(/could not fetch/i)).textContent ?? '';
-    expect(msg).toContain(String(DEFAULT_XE));
-    expect(msg).toContain('xe.com');
+    const { container } = render(<FxToast onRate={() => {}} />);
+    await screen.findByText(/live rate unavailable/i);
+    expect(container.querySelector('.fx-toast-rate')?.textContent).toBe(String(DEFAULT_XE));
   });
 
   it('is styled as a warning on failure', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('offline'); }));
     const { container } = render(<FxToast onRate={() => {}} />);
-    await screen.findByText(/Exchange rate unavailable/i);
+    await screen.findByText(/live rate unavailable/i);
     expect(container.querySelector('.fx-toast-warn')).toBeTruthy();
   });
 
@@ -109,7 +107,7 @@ describe('FxToast — failure path (the dangerous one)', () => {
     vi.stubGlobal('fetch', vi.fn(async () => ok({ rates: { USD: 0.858 } })));
     const onRate = vi.fn();
     render(<FxToast onRate={onRate} />);
-    await screen.findByText(/Exchange rate unavailable/i);
+    await screen.findByText(/live rate unavailable/i);
     expect(onRate).not.toHaveBeenCalled();
   });
 });
@@ -130,16 +128,16 @@ describe('FxToast — persistence and dismissal', () => {
     vi.stubGlobal('fetch', okRate());
     vi.useFakeTimers({ shouldAdvanceTime: true });
     render(<FxToast onRate={() => {}} />);
-    await screen.findByText(/Exchange rate applied/i);
+    await screen.findByText('EUR→USD');
     await act(async () => { await vi.advanceTimersByTimeAsync(300_000); });
-    expect(screen.queryByText(/Exchange rate applied/i)).toBeTruthy();
+    expect(screen.queryByText('EUR→USD')).toBeTruthy();
   });
 
   it('the × dismisses it, and it stays gone', async () => {
     vi.stubGlobal('fetch', okRate());
     const user = userEvent.setup();
     const { container } = render(<FxToast onRate={() => {}} />);
-    await screen.findByText(/Exchange rate applied/i);
+    await screen.findByText('EUR→USD');
     await user.click(screen.getByRole('button', { name: /dismiss/i }));
     expect(container.querySelector('.fx-toast')).toBeNull();
     // nothing re-opens it
@@ -150,7 +148,7 @@ describe('FxToast — persistence and dismissal', () => {
   it('the × is reachable by its accessible name (not just by class)', async () => {
     vi.stubGlobal('fetch', okRate());
     render(<FxToast onRate={() => {}} />);
-    await screen.findByText(/Exchange rate applied/i);
+    await screen.findByText('EUR→USD');
     expect(screen.getByRole('button', { name: /dismiss/i })).toBeTruthy();
   });
 
@@ -201,18 +199,18 @@ describe('FxToast — copy', () => {
     const writeText = vi.fn(async (_text: string) => {});
     setClipboard({ writeText });
     render(<FxToast onRate={() => {}} />);
-    const shown = (await screen.findByText(/EUR→USD =/)).textContent;
+    await screen.findByText('EUR→USD');
     fireEvent.click(screen.getByRole('button', { name: /^copy$/i }));
     await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
-    // exactly the text on screen — no truncation, no reformatting
-    expect(writeText.mock.calls[0][0]).toBe(shown);
+    // ONLY the number — no label, no source, nothing to strip after pasting
+    expect(writeText.mock.calls[0][0]).toBe(String(RATE));
   });
 
   it('confirms with "Copied" and then returns to "Copy"', async () => {
     vi.stubGlobal('fetch', okRate());
     setClipboard({ writeText: vi.fn(async () => {}) });
     render(<FxToast onRate={() => {}} />);
-    await screen.findByText(/Exchange rate applied/i);
+    await screen.findByText('EUR→USD');
     fireEvent.click(screen.getByRole('button', { name: /^copy$/i }));
     expect(await screen.findByRole('button', { name: /copied/i })).toBeTruthy();
     // the component resets after 1500ms — real timers, so just wait it out
@@ -226,7 +224,7 @@ describe('FxToast — copy', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (document as any).execCommand = exec;
     render(<FxToast onRate={() => {}} />);
-    await screen.findByText(/Exchange rate applied/i);
+    await screen.findByText('EUR→USD');
     fireEvent.click(screen.getByRole('button', { name: /^copy$/i }));
     await waitFor(() => expect(exec).toHaveBeenCalledWith('copy'));
     expect(await screen.findByRole('button', { name: /copied/i })).toBeTruthy();
@@ -239,7 +237,7 @@ describe('FxToast — copy', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (document as any).execCommand = exec;
     render(<FxToast onRate={() => {}} />);
-    await screen.findByText(/Exchange rate applied/i);
+    await screen.findByText('EUR→USD');
     fireEvent.click(screen.getByRole('button', { name: /^copy$/i }));
     await waitFor(() => expect(exec).toHaveBeenCalledWith('copy'));
   });
@@ -250,10 +248,10 @@ describe('FxToast — copy', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (document as any).execCommand = vi.fn(() => { throw new Error('blocked'); });
     render(<FxToast onRate={() => {}} />);
-    await screen.findByText(/Exchange rate applied/i);
+    await screen.findByText('EUR→USD');
     fireEvent.click(screen.getByRole('button', { name: /^copy$/i }));
-    // still rendered, still readable — the user can select the text by hand
-    expect(screen.getByText(/EUR→USD =/)).toBeTruthy();
+    // still rendered, still readable — the user can select the number by hand
+    expect(screen.getByText(String(RATE))).toBeTruthy();
   });
 
   it('does not leave the temporary textarea in the DOM', async () => {
@@ -262,7 +260,7 @@ describe('FxToast — copy', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (document as any).execCommand = vi.fn(() => true);
     render(<FxToast onRate={() => {}} />);
-    await screen.findByText(/Exchange rate applied/i);
+    await screen.findByText('EUR→USD');
     fireEvent.click(screen.getByRole('button', { name: /^copy$/i }));
     await waitFor(() => expect(document.querySelectorAll('textarea').length).toBe(0));
   });
@@ -285,7 +283,7 @@ describe('FxToast — integration with the calculator', () => {
   it('a FAILED lookup leaves the app on DEFAULT_XE', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('offline'); }));
     const { container } = render(<App />);
-    await screen.findByText(/Exchange rate unavailable/i);
+    await screen.findByText(/live rate unavailable/i);
     expect(container.textContent).toContain((10 * 2.55 * DEFAULT_XE).toFixed(2));
   });
 
