@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { FxToast } from './FxToast';
 import './App.css';
 import {
   DEFAULT_XE,
@@ -154,6 +155,8 @@ export default function App() {
 
   return (
     <div className="app">
+      {/* Fetches EUR→USD once on load and applies it; pinned top-right until dismissed. */}
+      <FxToast onRate={(r) => setXeStr(String(r))} />
       <header className="app-head">
         <h1>Boost Hedge</h1>
         <p className="tagline">

@@ -9,8 +9,10 @@ export default defineConfig({
   base: '/hedge-calc/',
   plugins: [react()],
   test: {
-    // calc.ts is pure and the App render test uses react-dom/server (no DOM),
-    // so a node environment is enough — no jsdom needed.
+    // calc.ts is pure and the App render test uses react-dom/server, so node is enough for
+    // most of the suite and keeps it fast. The ONE file that needs a DOM (FxToast.test.tsx —
+    // the toast's ×, its copy button and the live fetch) opts in with a
+    // `// @vitest-environment jsdom` docblock rather than forcing jsdom on everything.
     environment: 'node',
     include: ['src/**/*.test.{ts,tsx}'],
   },

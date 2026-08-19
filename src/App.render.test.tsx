@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import App from './App';
+import { DEFAULT_XE } from './calc';
 
 // Renders the real <App/> with its default inputs (Example A: odds 2.55, NO 50¢,
 // sports, taker) and asserts the calc wires through to the displayed strings.
@@ -18,11 +19,14 @@ describe('App (default Example-A inputs)', () => {
     expect(h).not.toMatch(/DEAD/);
   });
 
-  it('shows €20 shares = 58.76 and €10 shares = 29.38', () => {
-    // App default XE = DEFAULT_XE (1.15224): 20*2.55*1.15224 = 58.76424 -> 58.76 ;
-    // 10*2.55*1.15224 = 29.38212 -> 29.38
-    expect(h).toMatch(/58\.76/);
-    expect(h).toMatch(/29\.38/);
+  it('shows €20 shares = 59.16 and €10 shares = 29.58', () => {
+    // Shares scale LINEARLY with DEFAULT_XE, so these literals move whenever the default rate
+    // does. At DEFAULT_XE = 1.16 (bumped 2026-08-19): 20*2.55*1.16 = 59.16, 10*2.55*1.16 = 29.58.
+    // Derived from DEFAULT_XE below rather than hardcoded twice, so the next bump only needs
+    // calc.ts changed.
+    const per10 = 10 * 2.55 * DEFAULT_XE;
+    expect(h).toContain((per10 * 2).toFixed(2)); // €20 row
+    expect(h).toContain(per10.toFixed(2));       // €10 row
   });
 
   it('shows USD hedge costs and a positive net profit', () => {
@@ -50,8 +54,8 @@ describe('App (default Example-A inputs)', () => {
     expect(h).toMatch(/>€20</);
     // custom row carries an input defaulted to 50
     expect(h).toMatch(/aria-label="Custom stake in euros"[^>]*value="50"/);
-    // custom €50 shares: 50*2.55*1.15224 = 146.9106 -> 146.91
-    expect(h).toMatch(/146\.91/);
+    // custom €50 shares, same linear scaling: 50*2.55*1.16 = 147.90
+    expect(h).toContain((50 * 2.55 * DEFAULT_XE).toFixed(2));
   });
 
   it('shows the Taker segment active and defaults market to Sports', () => {
