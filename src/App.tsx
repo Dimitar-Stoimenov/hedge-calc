@@ -24,7 +24,7 @@ export default function App() {
         <p className="tagline">
           {tab === 'boost'
             ? 'Bookie boost × Polymarket NO — lock check & share sizing.'
-            : 'Bookie double hedged one leg at a time — equal profit on all three outcomes.'}
+            : 'Rolling hedge — equal profit on all three outcomes.'}
         </p>
         <div className="tabs" role="tablist" aria-label="Calculator">
           <button type="button" role="tab" aria-selected={tab === 'boost'} className={tab === 'boost' ? 'tab on' : 'tab'} onClick={() => setTab('boost')}>
