@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { DEFAULT_XE, FEE_RATES, MARKET_TYPES, type MarketType } from './calc';
-import { rollingHedge, legSlack, LEG_END_MINUTES, type LegEndKind } from './rolling';
+import { rollingHedge } from './rolling';
 import { rollingSummary, type LegInfo } from './summary';
 import { fmtCents, fmtMoneyEur, fmtPct, fmtShares, fmtUsd } from './format';
 import { parseNum } from './parse';
@@ -13,48 +13,30 @@ const MARKET_LABELS: Record<MarketType, string> = {
   geopolitics: 'Geopolitics',
 };
 
-const END_LABELS: Record<LegEndKind, string> = {
-  'full-time': `full time (~${LEG_END_MINUTES['full-time']} min)`,
-  'first-half': `1st half (~${LEG_END_MINUTES['first-half']} min)`,
-  early: `first goal / early (~${LEG_END_MINUTES.early} min)`,
-};
-
 /** Everything the user types about ONE leg — numbers as strings (mid-typing tolerant). */
 interface LegForm {
-  match: string;
-  bet: string;
-  polyHedge: string;
-  kickoff: string;
+  /** Free text pasted from the board — see summary.LegInfo.info. */
+  info: string;
   odds: string;
   price: string;
   feeOn: boolean;
 }
 
 // Defaults = the spec's worked example, so the page opens on a known-good position.
-const LEG1: LegForm = { match: '', bet: '', polyHedge: '', kickoff: '', odds: '2.02', price: '43', feeOn: true };
-const LEG2: LegForm = { match: '', bet: '', polyHedge: '', kickoff: '', odds: '2.20', price: '50', feeOn: true };
+const LEG1: LegForm = { info: '', odds: '2.02', price: '43', feeOn: true };
+const LEG2: LegForm = { info: '', odds: '2.20', price: '50', feeOn: true };
+const INFO_PLACEHOLDER = 'paste the board row: date · league · bookie · fixture · bet';
 
-function TextField({ label, value, onChange, placeholder, mono, wide }: {
-  label: string; value: string; onChange: (v: string) => void; placeholder?: string; mono?: boolean; wide?: boolean;
-}) {
+function NumField({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string }) {
   return (
-    <label className={`field ${wide ? 'span2' : ''}`}>
+    <label className="field">
       <span className="field-label">{label}</span>
-      <input type="text" inputMode={mono ? 'decimal' : 'text'} autoComplete="off" value={value} placeholder={placeholder}
-        onChange={(e) => onChange(e.target.value)} />
+      <input type="text" inputMode="decimal" autoComplete="off" value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
     </label>
   );
 }
 
-const EXAMPLE_PLACEHOLDERS = [
-  { match: 'Levski – Salzburg', bet: 'Over 2.5 goals', poly: 'Levski–Salzburg U2.5 goals', odds: '2.02', price: '43' },
-  { match: 'Bayern – Union', bet: 'Over 10.5 corners', poly: 'Bayern–Union U10.5 corners', odds: '2.20', price: '50' },
-] as const;
-
-function LegCard({ n, leg, onChange, feeRatePct, gate }: {
-  n: 1 | 2; leg: LegForm; onChange: (patch: Partial<LegForm>) => void; feeRatePct: number; gate: number | null;
-}) {
-  const ph = EXAMPLE_PLACEHOLDERS[n - 1];
+function LegCard({ n, leg, onChange, gate }: { n: 1 | 2; leg: LegForm; onChange: (patch: Partial<LegForm>) => void; gate: number | null }) {
   return (
     <fieldset className="leg">
       <legend>
@@ -65,31 +47,17 @@ function LegCard({ n, leg, onChange, feeRatePct, gate }: {
           </span>
         )}
       </legend>
+      <label className="field">
+        <span className="field-label">Bet info</span>
+        <textarea rows={2} value={leg.info} placeholder={INFO_PLACEHOLDER} onChange={(e) => onChange({ info: e.target.value })} />
+      </label>
       <div className="grid2">
-        <TextField label="Bookie odds" value={leg.odds} onChange={(v) => onChange({ odds: v })} placeholder={ph.odds} mono />
-        <TextField label="Poly opposite side (¢)" value={leg.price} onChange={(v) => onChange({ price: v })} placeholder={ph.price} mono />
+        <NumField label="Bookie odds" value={leg.odds} onChange={(v) => onChange({ odds: v })} placeholder="2.02" />
+        <NumField label="Poly opposite side (¢)" value={leg.price} onChange={(v) => onChange({ price: v })} placeholder="43" />
       </div>
-      <div className="grid2">
-        <TextField label="Match" value={leg.match} onChange={(v) => onChange({ match: v })} placeholder={ph.match} />
-        <TextField label="Bookie bet" value={leg.bet} onChange={(v) => onChange({ bet: v })} placeholder={ph.bet} />
-      </div>
-      <div className="grid2">
-        <TextField label="Poly hedge (token you buy)" value={leg.polyHedge} onChange={(v) => onChange({ polyHedge: v })} placeholder={ph.poly} />
-        <label className="field">
-          <span className="field-label">Kick-off (optional)</span>
-          <input type="datetime-local" value={leg.kickoff} onChange={(e) => onChange({ kickoff: e.target.value })} />
-        </label>
-      </div>
-      <div className="toggle-row">
-        <div className="segmented" role="group" aria-label={`Leg ${n} fee`}>
-          <button type="button" className={leg.feeOn ? 'seg on' : 'seg'} onClick={() => onChange({ feeOn: true })}>
-            Taker · fee {feeRatePct}%
-          </button>
-          <button type="button" className={!leg.feeOn ? 'seg on' : 'seg'} onClick={() => onChange({ feeOn: false })}>
-            No fee
-          </button>
-        </div>
-        <span className="fee-hint">no fee = maker order, or a fill price from the activity log</span>
+      <div className="segmented" role="group" aria-label={`Leg ${n} fee`}>
+        <button type="button" className={leg.feeOn ? 'seg on' : 'seg'} onClick={() => onChange({ feeOn: true })}>Taker</button>
+        <button type="button" className={!leg.feeOn ? 'seg on' : 'seg'} onClick={() => onChange({ feeOn: false })}>No fee</button>
       </div>
     </fieldset>
   );
@@ -98,10 +66,7 @@ function LegCard({ n, leg, onChange, feeRatePct, gate }: {
 export function RollingCalc({ xeStr, setXeStr }: { xeStr: string; setXeStr: (s: string) => void }) {
   const [stakeStr, setStakeStr] = useState('37.15');
   const [payoutStr, setPayoutStr] = useState('');
-  const [bookie, setBookie] = useState('');
-  const [note, setNote] = useState('');
   const [market, setMarket] = useState<MarketType>('sports');
-  const [leg1Ends, setLeg1Ends] = useState<LegEndKind>('full-time');
   const [legs, setLegs] = useState<[LegForm, LegForm]>([LEG1, LEG2]);
   const [advOpen, setAdvOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -116,7 +81,6 @@ export function RollingCalc({ xeStr, setXeStr }: { xeStr: string; setXeStr: (s: 
   const odds = legs.map((l) => parseNum(l.odds));
   const prices = legs.map((l) => parseNum(l.price));
   const feeRate = FEE_RATES[market];
-  const feeRatePct = Math.round(feeRate * 100);
 
   const errors: string[] = [];
   if (stake !== null && stake <= 0) errors.push('Stake must be greater than 0.');
@@ -138,18 +102,11 @@ export function RollingCalc({ xeStr, setXeStr }: { xeStr: string; setXeStr: (s: 
       xe: xe as number,
       payout: payoutStr.trim() ? payout : null,
     });
-    const info: LegInfo[] = legs.map((l, i) => ({
-      match: l.match, bet: l.bet, polyHedge: l.polyHedge, kickoff: l.kickoff,
-      odds: odds[i] as number, priceCents: prices[i] as number, feeOn: l.feeOn,
-    }));
-    const summary = rollingSummary({
-      bookie, stake: stake as number, slipPayout: payoutStr.trim() ? payout : null, xe: xe as number, feeRatePct, legs: info, note,
-    }, r);
-    const k1 = Date.parse(legs[0].kickoff), k2 = Date.parse(legs[1].kickoff);
-    const slack = Number.isFinite(k1) && Number.isFinite(k2) ? legSlack(k1, k2, leg1Ends) : null;
+    const info: LegInfo[] = legs.map((l, i) => ({ info: l.info, odds: odds[i] as number, priceCents: prices[i] as number, feeOn: l.feeOn }));
+    const summary = rollingSummary({ stake: stake as number, xe: xe as number, legs: info }, r);
     const bigOrder = r.legs.some((l) => l.costUsd > 50);
-    return { r, summary, slack, bigOrder };
-  }, [ready, stake, legs, odds, prices, feeRate, xe, payout, payoutStr, bookie, note, feeRatePct, leg1Ends]);
+    return { r, summary, bigOrder };
+  }, [ready, stake, legs, odds, prices, feeRate, xe, payout, payoutStr]);
 
   async function copySummary() {
     if (!view) return;
@@ -166,34 +123,23 @@ export function RollingCalc({ xeStr, setXeStr }: { xeStr: string; setXeStr: (s: 
     <>
       <section className="card">
         <div className="grid2">
-          <TextField label="Stake (€)" value={stakeStr} onChange={setStakeStr} placeholder="37.15" mono />
-          <TextField label="Slip payout (€, optional)" value={payoutStr} onChange={setPayoutStr} placeholder={view ? fmtShares(view.r.nominalPayout) : 'stake × odds'} mono />
+          <NumField label="Stake (€)" value={stakeStr} onChange={setStakeStr} placeholder="37.15" />
+          <NumField label="Slip payout (€, optional)" value={payoutStr} onChange={setPayoutStr} placeholder={view ? fmtShares(view.r.nominalPayout) : 'stake × odds'} />
         </div>
-        <div className="grid2">
-          <TextField label="Bookie" value={bookie} onChange={setBookie} placeholder="inbet" />
-          <label className="field">
-            <span className="field-label">Market type</span>
-            <select value={market} onChange={(e) => setMarket(e.target.value as MarketType)}>
-              {MARKET_TYPES.map((m) => (
-                <option key={m} value={m}>{MARKET_LABELS[m]} — fee {(FEE_RATES[m] * 100).toFixed(0)}%</option>
-              ))}
-            </select>
-          </label>
-        </div>
+        <label className="field">
+          <span className="field-label">Market type</span>
+          <select value={market} onChange={(e) => setMarket(e.target.value as MarketType)}>
+            {MARKET_TYPES.map((m) => (
+              <option key={m} value={m}>{MARKET_LABELS[m]} — fee {(FEE_RATES[m] * 100).toFixed(0)}%</option>
+            ))}
+          </select>
+        </label>
 
-        <LegCard n={1} leg={legs[0]} onChange={patchLeg(0)} feeRatePct={feeRatePct} gate={view ? view.r.legs[0].gate : null} />
+        <LegCard n={1} leg={legs[0]} onChange={patchLeg(0)} gate={view ? view.r.legs[0].gate : null} />
         <div className="swap-row">
           <button type="button" className="swap" onClick={swapLegs} title="Leg 1 must be the match that finishes first">⇅ swap legs</button>
-          <label className="field ends">
-            <span className="field-label">Leg 1 market ends at</span>
-            <select value={leg1Ends} onChange={(e) => setLeg1Ends(e.target.value as LegEndKind)}>
-              {(Object.keys(LEG_END_MINUTES) as LegEndKind[]).map((k) => <option key={k} value={k}>{END_LABELS[k]}</option>)}
-            </select>
-          </label>
         </div>
-        <LegCard n={2} leg={legs[1]} onChange={patchLeg(1)} feeRatePct={feeRatePct} gate={view ? view.r.legs[1].gate : null} />
-
-        <TextField label="Note (optional)" value={note} onChange={setNote} placeholder="anything the record should carry" />
+        <LegCard n={2} leg={legs[1]} onChange={patchLeg(1)} gate={view ? view.r.legs[1].gate : null} />
 
         <div className="advanced">
           <button type="button" className="adv-toggle" onClick={() => setAdvOpen((v) => !v)} aria-expanded={advOpen}>
@@ -225,15 +171,6 @@ export function RollingCalc({ xeStr, setXeStr }: { xeStr: string; setXeStr: (s: 
             <p className="void-tail void-warn">One leg is negative on its own — the other leg carries the whole edge.</p>
           )}
           {view.r.gate < 1 && <p className="void-tail void-warn">Gate below 1: this double loses on every branch after hedge costs.</p>}
-          {view.slack && (
-            <p className={`void-tail ${view.slack.wrongOrder || view.slack.slackMin < 0 ? 'void-warn' : ''}`}>
-              {view.slack.wrongOrder
-                ? 'Leg 2 kicks off BEFORE leg 1 — swap the legs.'
-                : view.slack.slackMin < 0
-                  ? `Games overlap by ${fmtPct(-view.slack.slackMin, 0)} min — leg 1 will not be settled before leg 2 starts.`
-                  : `Slack ${fmtPct(view.slack.slackMin, 0)} min between leg 1 settling and leg 2 kick-off.`}
-            </p>
-          )}
         </section>
       )}
 

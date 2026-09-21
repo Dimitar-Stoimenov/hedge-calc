@@ -545,3 +545,21 @@ input[type='datetime-local']:focus {
   user-select: text;
   -webkit-user-select: text;
 }
+
+textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--field-border);
+  border-radius: 8px;
+  background: var(--field-bg);
+  color: var(--text-h);
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 1.35;
+  resize: vertical;
+  outline: none;
+}
+textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-bg);
+}

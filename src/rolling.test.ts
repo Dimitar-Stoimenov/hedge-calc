@@ -137,45 +137,37 @@ describe('legSlack — chronology', () => {
   });
 });
 
-describe('rollingSummary — the copy-paste block', () => {
+describe('rollingSummary — the lean copy-paste block', () => {
   const r = rollingHedge(EXAMPLE);
   const text = rollingSummary({
-    bookie: 'inbet',
     stake: 37.15,
-    slipPayout: 165.09,
     xe: 1.147649513,
-    feeRatePct: 5,
-    note: 'both legs in the same slip',
-    now: new Date(2026, 8, 17, 18, 30),
     legs: [
-      { match: 'Levski – Salzburg', bet: 'Over 2.5 goals', polyHedge: 'Levski–Salzburg U2.5 goals', kickoff: '2026-09-17T19:45', odds: 2.02, priceCents: 43, feeOn: true },
-      { match: 'Bayern – Union', bet: 'Over 10.5 corners', polyHedge: 'Bayern–Union U10.5 corners', kickoff: '2026-09-17T21:00', odds: 2.2, priceCents: 50, feeOn: false },
+      { info: 'Sep 17, 19:45\tUEFA CL\tinbet\tLevski vs Salzburg\tTotal Goals: Over 2.5', odds: 2.02, priceCents: 43, feeOn: true },
+      { info: 'Sep 17, 21:00  Bundesliga  inbet  Bayern vs Union\n Corners: Over 10.5', odds: 2.2, priceCents: 50, feeOn: false },
     ],
   }, r);
   const lines = text.split('\n');
 
-  it('header, slip line, one block per leg with the explicit Poly action, lock line, branches, note', () => {
-    expect(lines[0]).toBe('ROLLING DOUBLE — 2026-09-17 18:30');
-    expect(lines[1]).toMatch(/^Bookie: inbet · stake €37\.15 · payout €165\.09 · combined 4\.444$/);
-    expect(lines[2]).toBe('Leg 1 (finishes first): Levski – Salzburg · Over 2.5 goals @2.02 · kickoff 2026-09-17 19:45');
-    expect(lines[3]).toMatch(/^  Poly hedge: Levski–Salzburg U2\.5 goals @43¢ \(taker, fee 5% → 44\.23¢\) · leg edge 12\.7%$/);
-    expect(lines[4]).toBe('  → BUY NOW: 92.36 shares ≈ $40.85');
-    expect(lines[5]).toBe('Leg 2: Bayern – Union · Over 10.5 corners @2.2 · kickoff 2026-09-17 21:00');
-    expect(lines[6]).toMatch(/no fee \(maker \/ fill price\)/);
-    expect(lines[7]).toMatch(/^  → BUY ONLY IF LEG 1 WINS: 189\.47 shares ≈ \$/);
-    expect(lines[8]).toMatch(/^Lock \+€\d+\.\d\d \(\d+\.\d% of stake\) · gate \d+\.\d% · total Poly capital \$\d+\.\d\d · XE 1\.147649513$/);
-    expect(lines[9]).toMatch(/^Branches: leg 1 fails \+€.* · leg 2 fails \+€.* · all win \+€/);
-    expect(lines[10]).toBe('Note: both legs in the same slip');
+  it('one header, two lines per leg (pasted info verbatim on one line + the explicit Poly action), the lock, the verify request', () => {
+    expect(lines[0]).toBe('ROLLING DOUBLE — stake €37.15 · payout €165.09 · XE 1.147649513');
+    expect(lines[1]).toBe('Leg 1: Sep 17, 19:45 UEFA CL inbet Levski vs Salzburg Total Goals: Over 2.5 @2.02 · Poly opposite @43¢ (taker)');
+    expect(lines[2]).toBe('  → BUY NOW: 92.36 shares ≈ $40.85');
+    expect(lines[3]).toBe('Leg 2: Sep 17, 21:00 Bundesliga inbet Bayern vs Union Corners: Over 10.5 @2.2 · Poly opposite @50¢ (no fee)');
+    expect(lines[4]).toMatch(/^  → BUY ONLY IF LEG 1 WINS: 189\.47 shares ≈ \$9[0-9]\.\d\d$/);
+    expect(lines[5]).toMatch(/^Lock \+€\d+\.\d\d on every outcome \(\d+\.\d% of stake\)$/);
+    expect(lines[6]).toBe('Please verify all calculations are correct.');
+    expect(lines).toHaveLength(7);
+    // nothing about fee rates, gates, branches or capital — calculation only
+    expect(text).not.toMatch(/%\s*→|gate|Branches|capital/);
   });
 
-  it('blank optional fields fall back to "?" and the note line is dropped', () => {
-    const t = rollingSummary({ bookie: '', stake: 37.15, slipPayout: null, xe: 1.15, feeRatePct: 5, note: '', legs: [
-      { match: '', bet: '', polyHedge: '', kickoff: '', odds: 2.02, priceCents: 43, feeOn: true },
-      { match: '', bet: '', polyHedge: '', kickoff: '', odds: 2.2, priceCents: 50, feeOn: true },
+  it('blank info falls back to "?"', () => {
+    const t = rollingSummary({ stake: 37.15, xe: 1.15, legs: [
+      { info: '', odds: 2.02, priceCents: 43, feeOn: true },
+      { info: '   ', odds: 2.2, priceCents: 50, feeOn: true },
     ] }, rollingHedge({ ...EXAMPLE, xe: 1.15, payout: null }));
-    expect(t).toMatch(/^Bookie: \? · stake/m);
-    expect(t).toMatch(/^Leg 1 \(finishes first\): \? · \? @2\.02$/m);
-    expect(t).not.toMatch(/Note:/);
-    expect(t).not.toMatch(/slip;/);
+    expect(t).toMatch(/^Leg 1: \? @2\.02/m);
+    expect(t).toMatch(/^Leg 2: \? @2\.2/m);
   });
 });

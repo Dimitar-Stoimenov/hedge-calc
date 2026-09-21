@@ -30,21 +30,20 @@ describe('RollingCalc (worked-example defaults)', () => {
     expect(h).toMatch(/leg-gate pos"[^>]*>\+7\.3%/);
   });
 
-  it('renders the copyable summary with the two explicit Poly actions and "?" for the blank game info', () => {
-    expect(h).toMatch(/<pre class="summary">ROLLING DOUBLE — /);
-    expect(h).toMatch(/→ BUY NOW: 92.3[67] shares ≈ \$40\.8[0-9]/);
+  it('renders the lean copyable summary: both Poly actions, "?" for blank bet info, the verify line', () => {
+    expect(h).toMatch(/<pre class="summary">ROLLING DOUBLE — stake €37\.15/);
+    expect(h).toMatch(/→ BUY NOW: 92\.3[67] shares ≈ \$40\.8[0-9]/);
     expect(h).toMatch(/→ BUY ONLY IF LEG 1 WINS: 189\.47 shares ≈ \$97\.1[0-9]/);
-    expect(h).toMatch(/Leg 1 \(finishes first\): \? · \? @2\.02/);
-    expect(h).toMatch(/Branches: leg 1 fails \+€7\.7[0-9] · leg 2 fails \+€7\.7[0-9] · all win \+€7\.7[0-9]/);
+    expect(h).toMatch(/Leg 1: \? @2\.02 · Poly opposite @43¢ \(taker\)/);
+    expect(h).toMatch(/Please verify all calculations are correct\.<\/pre>/);
   });
 
-  it('has the game-info fields, kick-off pickers, per-leg fee toggles and the swap button', () => {
-    expect(h).toMatch(/placeholder="Levski – Salzburg"/);
-    expect(h).toMatch(/placeholder="Bayern – Union"/);
-    expect((h.match(/type="datetime-local"/g) ?? []).length).toBe(2);
-    expect((h.match(/class="seg on">Taker · fee 5%/g) ?? []).length).toBe(2);
+  it('has one free-text bet-info box per leg, a plain Taker / No fee toggle, and the swap button', () => {
+    expect((h.match(/<textarea[^>]*rows="2"/g) ?? []).length).toBe(2);
+    expect((h.match(/class="seg on">Taker<\/button>/g) ?? []).length).toBe(2);
+    expect(h).not.toMatch(/fee 5%<\/button>/);
     expect(h).toMatch(/⇅ swap legs/);
-    expect(h).toMatch(/Leg 1 market ends at/);
+    expect(h).not.toMatch(/datetime-local/);
   });
 
   it('numeric inputs stay type=text + inputmode=decimal; no type=number anywhere', () => {
