@@ -5,7 +5,14 @@ the fly. Enter the boosted odds and the Polymarket **NO** ask, and it instantly
 shows whether the position **locks**, the profit %, the shares to buy for €10 / €20
 / a custom stake, the USD hedge cost, the net EUR profit, and the breakeven NO price.
 
-No backend, no storage, no network — everything is a pure function of the inputs.
+A second tab, **Rolling double** (2026-09-21), sizes a two-leg bookie parlay hedged one leg at a time:
+the leg-2 hedge is bought only if leg 1 wins, and the share counts make all three outcomes (leg 1 fails;
+leg 1 wins, leg 2 fails; both win) pay the same. It takes per-leg game info and produces a plain-text
+summary to paste into a bet log. Math in [src/rolling.ts](src/rolling.ts), pinned by the spec's worked
+example in [src/rolling.test.ts](src/rolling.test.ts) and swept over thousands of random positions by an
+independent cash-flow replay in [src/rolling.invariants.test.ts](src/rolling.invariants.test.ts).
+
+No backend, no storage — the only network call is the EUR→USD rate on load.
 
 ## Develop
 
