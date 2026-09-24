@@ -43,6 +43,12 @@ export interface RollingInput {
    * coefficient). The slip is what actually pays, so it wins when given.
    */
   payout?: number | null;
+  /**
+   * Bookie MULTIPLE BONUS in percent (user 2026-09-24: "some bookies give you bonuses for
+   * multiples/doubles/triples"): the nominal payout becomes stake·∏odds·(1 + bonusPct/100). A slip
+   * payout, when given, still wins — the slip already has the bonus inside. 0 / absent / junk = none.
+   */
+  bonusPct?: number | null;
 }
 
 export interface RollingLegResult {
@@ -60,8 +66,10 @@ export interface RollingResult {
   legs: RollingLegResult[];
   /** EUR payout used (slip figure when given, else stake·∏odds). */
   payout: number;
-  /** stake · ∏odds — shown next to the slip figure so a rounding gap is visible. */
+  /** stake · ∏odds · (1 + bonus) — shown next to the slip figure so a rounding gap is visible. */
   nominalPayout: number;
+  /** The multiple bonus that went into nominalPayout, in percent (0 when none). */
+  bonusPct: number;
   /**
    * Profit (EUR) of every branch, in order: leg 1 fails, leg 1 wins & leg 2 fails, …, all legs
    * win. They agree to rounding when payout === nominalPayout; a slip that pays more than
@@ -86,7 +94,8 @@ export interface RollingResult {
  */
 export function rollingHedge(input: RollingInput): RollingResult {
   const { stake, legs, feeRate, xe } = input;
-  const nominalPayout = legs.reduce((acc, l) => acc * l.odds, stake);
+  const bonus = input.bonusPct != null && Number.isFinite(input.bonusPct) && input.bonusPct > 0 ? 1 + input.bonusPct / 100 : 1;
+  const nominalPayout = legs.reduce((acc, l) => acc * l.odds, stake) * bonus;
   const payout = input.payout != null && input.payout > 0 ? input.payout : nominalPayout;
 
   const pEffs = legs.map((l) => effectivePrice(l.priceCents / 100, feeRate, !l.feeOn));
@@ -124,6 +133,7 @@ export function rollingHedge(input: RollingInput): RollingResult {
     legs: legResults,
     payout,
     nominalPayout,
+    bonusPct: (bonus - 1) * 100,
     branches,
     lock,
     lockPct: stake > 0 ? lock / stake : 0,

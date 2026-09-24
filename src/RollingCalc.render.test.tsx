@@ -68,3 +68,48 @@ describe('App shell', () => {
     expect(a).not.toMatch(/ROLLING DOUBLE/);
   });
 });
+
+/**
+ * ROLLING TRIPLE (user 2026-09-24): the same component with legCount 3, at the tested three-leg
+ * defaults (€20; 2.02 @43¢, 2.20 @50¢, 2.10 @44¢, sports taker, XE 1.15) — a LOCK with four equal outcomes.
+ */
+describe('RollingCalc legCount=3 (triple defaults)', () => {
+  const t = renderToStaticMarkup(<RollingCalc legCount={3} xeStr="1.15" setXeStr={() => {}} />);
+  it('three leg cards, two swap buttons (1↔2, 2↔3), three step rows and a total, FOUR equal branch rows', () => {
+    expect((t.match(/<textarea[^>]*rows="2"/g) ?? []).length).toBe(3);
+    expect((t.match(/⇅ swap legs/g) ?? []).length).toBe(2);
+    expect(t).toMatch(/1 · buy now/);
+    expect(t).toMatch(/2 · only if leg 1 wins/);
+    expect(t).toMatch(/3 · only if legs 1–2 win/);
+    expect(t).toMatch(/total if all fire/);
+    expect(t).toMatch(/A · leg 1 fails/);
+    expect(t).toMatch(/B · leg 1 wins, leg 2 fails/);
+    expect(t).toMatch(/C · legs 1–2 win, leg 3 fails/);
+    expect(t).toMatch(/D · all win/);
+    const nets = t.match(/class="col-profit mono (?:pos|neg)">([^<]+)</g) ?? [];
+    expect(nets).toHaveLength(4);
+    expect(new Set(nets).size).toBe(1); // every outcome pays the same
+  });
+  it('leg 3 says its hedge waits for legs 1 and 2; the summary is a 3-LEG PARLAY', () => {
+    expect(t).toMatch(/hedge bought only if legs 1–2 win/);
+    expect(t).toMatch(/class="pill lock"/); // the page opens on a known-good triple
+    expect(t).toMatch(/<pre class="summary">ROLLING 3-LEG PARLAY — stake €20\.00/);
+    expect(t).toMatch(/→ BUY ONLY IF LEGS 1–2 WIN:/);
+  });
+  it('has a bonus % field, blank by default', () => {
+    expect(t).toMatch(/Multiple bonus \(%, optional\)/);
+  });
+});
+
+describe('RollingCalc bonus', () => {
+  it('the double still renders exactly as before when the bonus is blank (no bonus text)', () => {
+    expect(h).not.toMatch(/bonus applied/i);
+  });
+});
+
+describe('App shell — three tabs', () => {
+  const a = renderToStaticMarkup(<App />);
+  it('shows the Rolling triple tab too', () => {
+    expect(a).toMatch(/role="tab" aria-selected="false"[^>]*>Rolling triple/);
+  });
+});

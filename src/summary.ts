@@ -30,7 +30,9 @@ export function tidyInfo(s: string): string {
 export function rollingSummary(info: SummaryInfo, r: RollingResult): string {
   const n = info.legs.length;
   const lines: string[] = [];
-  lines.push(`ROLLING ${n === 2 ? 'DOUBLE' : `${n}-LEG PARLAY`} — stake €${two(info.stake)} · payout €${two(r.payout)} · XE ${info.xe}`);
+  // A multiple bonus is part of what the bookie pays, so the log says so (user 2026-09-24).
+  const bonus = r.bonusPct > 0 ? ` (incl. ${Number(roundTo(r.bonusPct, 2))}% bonus)` : '';
+  lines.push(`ROLLING ${n === 2 ? 'DOUBLE' : `${n}-LEG PARLAY`} — stake €${two(info.stake)} · payout €${two(r.payout)}${bonus} · XE ${info.xe}`);
   info.legs.forEach((leg, i) => {
     const lr = r.legs[i];
     lines.push(`Leg ${i + 1}: ${tidyInfo(leg.info) || '?'} @${leg.odds} · Poly opposite @${leg.priceCents}¢ (${leg.feeOn ? 'taker' : 'no fee'})`);

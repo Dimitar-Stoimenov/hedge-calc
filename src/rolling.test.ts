@@ -171,3 +171,36 @@ describe('rollingSummary — the lean copy-paste block', () => {
     expect(t).toMatch(/^Leg 2: \? @2\.2/m);
   });
 });
+
+describe('rollingHedge — multiple BONUS (user 2026-09-24: "some bookies give you bonuses for multiples")', () => {
+  const base = { stake: 20, legs: [{ odds: 1.8, priceCents: 50, feeOn: true }, { odds: 1.9, priceCents: 48, feeOn: true }, { odds: 2.1, priceCents: 44, feeOn: true }], feeRate: 0.05, xe: 1.15, payout: null };
+  it('a 10% bonus lifts the nominal payout by 10% and sizes the LAST hedge on it; every branch still agrees', () => {
+    const plain = rollingHedge(base);
+    const r = rollingHedge({ ...base, bonusPct: 10 });
+    expect(r.nominalPayout).toBeCloseTo(plain.nominalPayout * 1.1, 9);
+    expect(r.payout).toBeCloseTo(plain.nominalPayout * 1.1, 9);
+    expect(r.legs[2].shares).toBeCloseTo(r.payout * 1.15, 9);
+    for (const b of r.branches) expect(b).toBeCloseTo(r.branches[0], 9);
+    expect(r.lock).toBeGreaterThan(plain.lock);
+  });
+  it('a slip payout still wins over odds × bonus (the slip already includes the bonus)', () => {
+    const r = rollingHedge({ ...base, bonusPct: 10, payout: 150 });
+    expect(r.payout).toBe(150);
+    expect(r.nominalPayout).toBeCloseTo(20 * 1.8 * 1.9 * 2.1 * 1.1, 9);
+  });
+  it('bonus 0 / undefined / negative-or-junk → no change', () => {
+    const plain = rollingHedge(base);
+    expect(rollingHedge({ ...base, bonusPct: 0 }).payout).toBeCloseTo(plain.payout, 9);
+    expect(rollingHedge({ ...base, bonusPct: -5 }).payout).toBeCloseTo(plain.payout, 9);
+    expect(rollingHedge({ ...base, bonusPct: NaN }).payout).toBeCloseTo(plain.payout, 9);
+  });
+});
+
+describe('rollingSummary — bonus line', () => {
+  const info = { stake: 20, xe: 1.15, legs: [{ info: '', odds: 1.8, priceCents: 50, feeOn: true }, { info: '', odds: 1.9, priceCents: 48, feeOn: true }, { info: '', odds: 2.1, priceCents: 44, feeOn: true }] };
+  const base = { stake: 20, legs: info.legs.map(({ odds, priceCents, feeOn }) => ({ odds, priceCents, feeOn })), feeRate: 0.05, xe: 1.15, payout: null };
+  it('names the bonus in the header when one applies, and stays silent otherwise', () => {
+    expect(rollingSummary(info, rollingHedge({ ...base, bonusPct: 10 }))).toMatch(/^ROLLING 3-LEG PARLAY — stake €20\.00 · payout €158\.00 \(incl\. 10% bonus\) · XE 1\.15/);
+    expect(rollingSummary(info, rollingHedge(base))).not.toMatch(/bonus/);
+  });
+});
