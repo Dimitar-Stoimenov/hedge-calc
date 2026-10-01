@@ -130,7 +130,9 @@ export function BoostCalc({ xeStr, setXeStr }: { xeStr: string; setXeStr: (s: st
   const [isFreeBet, setIsFreeBet] = useState(false);
   const [customStr, setCustomStr] = useState('50');
   const [advOpen, setAdvOpen] = useState(false);
-  // SX (2026-10-02): the decimal odds sx.bet shows for backing the OTHER side. Empty = no SX panel.
+  // SX (2026-10-02): the PRICE IN PERCENT of the side backed on sx.bet (user 2026-10-02: "change everything to be
+  // percent") — up to 3 decimals, used exactly as typed (SX limit orders take 3; never snapped to a grid). Empty = no
+  // SX panel. Typing decimal odds made the user enter a rounded 2.13 for a real 2.1333.
   const [sxStr, setSxStr] = useState('');
   // the SX panel's own custom stake (user 2026-10-02) — independent of the Poly custom row
   const [sxCustomStr, setSxCustomStr] = useState('50');
@@ -139,7 +141,9 @@ export function BoostCalc({ xeStr, setXeStr }: { xeStr: string; setXeStr: (s: st
   const noPrice = parseNum(noStr);
   const xe = parseNum(xeStr);
   const custom = parseNum(customStr);
-  const sxOdds = parseNum(sxStr);
+  const sxPctIn = parseNum(sxStr);
+  // the maths stays in decimal odds: odds = 100 / %
+  const sxOdds = sxPctIn !== null && sxPctIn > 0 && sxPctIn < 100 ? 100 / sxPctIn : null;
   const sxCustom = parseNum(sxCustomStr);
   const feeRate = FEE_RATES[market];
 
@@ -149,7 +153,7 @@ export function BoostCalc({ xeStr, setXeStr }: { xeStr: string; setXeStr: (s: st
   if (noPrice !== null && (noPrice <= 0 || noPrice >= 100))
     errors.push('NO price must be between 0 and 100¢.');
   if (xe !== null && xe <= 0) errors.push('Exchange rate must be greater than 0.');
-  if (sxOdds !== null && sxOdds <= 1) errors.push('SX odds must be greater than 1.');
+  if (sxPctIn !== null && (sxPctIn <= 0 || sxPctIn >= 100)) errors.push('SX % must be between 0 and 100.');
 
   // THE SX PANEL — the same boost odds, stakes and rate, hedged on SX instead of Poly. Independent of the Poly NO
   // price: either panel shows as soon as its own hedge price is filled in.
@@ -161,7 +165,10 @@ export function BoostCalc({ xeStr, setXeStr }: { xeStr: string; setXeStr: (s: st
     const customRow = sxCustom !== null && sxCustom > 0 ? size(sxCustom) : null;
     // same depth reminder as the Poly panel: any SX stake shown above $50
     const bigOrder = [...rows.map((x) => x.r), ...(customRow ? [customRow] : [])].some((x) => x.sxStakeUsd > 50);
-    return { lock, breakeven: breakevenSxOdds(odds), rows, customRow, bigOrder };
+    // the HIGHEST SX % that still locks, floored to 3 decimals (a price rounded up would not lock); null = none locks
+    const be = breakevenSxOdds(odds);
+    const breakevenPct = Number.isFinite(be) ? Math.floor((100 / be) * 1000 + 1e-9) / 1000 : null;
+    return { lock, breakevenPct, costPerDollar: sxCostPerDollar(sxOdds), rows, customRow, bigOrder };
   }, [odds, xe, sxOdds, isFreeBet, sxCustom]);
 
   const inputsReady =
@@ -245,17 +252,17 @@ export function BoostCalc({ xeStr, setXeStr }: { xeStr: string; setXeStr: (s: st
           </label>
         </div>
 
-        {/* SX (2026-10-02): the decimal odds for backing the OTHER side on sx.bet — fills the SX panel below */}
+        {/* SX (2026-10-02): the % price of the side backed on sx.bet — fills the SX panel below */}
         <label className="field">
-          <span className="field-label">SX odds</span>
+          <span className="field-label">SX %</span>
           <input
             type="text"
             inputMode="decimal"
             autoComplete="off"
             value={sxStr}
             onChange={(e) => setSxStr(e.target.value)}
-            placeholder="optional, e.g. 2.05"
-            aria-label="SX odds"
+            placeholder="optional, e.g. 46.875"
+            aria-label="SX %"
           />
         </label>
 
@@ -438,7 +445,7 @@ export function BoostCalc({ xeStr, setXeStr }: { xeStr: string; setXeStr: (s: st
                 <span className="pill-pct">{sxView.lock.isLock ? '+' : ''}{fmtPct(sxView.lock.marginPct)}%</span>
               </div>
               <p className="breakeven">
-                Profitable if SX odds ≥ <strong>{Number.isFinite(sxView.breakeven) ? sxView.breakeven.toFixed(3) : '—'}</strong> (taker, 1% of winnings)
+                Profitable if SX ≤ <strong>{sxView.breakevenPct ?? '—'}%</strong> (taker) · <strong>{fmtCents(sxView.costPerDollar * 100)}¢</strong> with the fee
               </p>
               {/* SX refunds every leg on a cancel / draw / no contest, like the bookie — unlike Poly's 50-50 */}
               <p className="void-tail">A void refunds both legs — <strong>no void tail</strong></p>
