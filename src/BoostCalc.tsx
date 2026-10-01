@@ -13,6 +13,7 @@ import {
   voidTail,
   VOID_WATCH_PRICE_CENTS,
   type MarketType,
+  type SxSizeResult,
 } from './calc';
 import { fmtCents, fmtMoneyEur, fmtPct, fmtShares, fmtUsd } from './format';
 import { parseNum } from './parse';
@@ -81,6 +82,44 @@ function ResultCells({ inputs, stake }: { inputs: CalcInputs; stake: number }) {
   );
 }
 
+/** One SX row's cells, in the Poly table's column order: returns · stake on SX · net profit · void tail (none).
+ *  The SX stake is the number typed into sx.bet, so it copies like Poly's shares — bare, no "$" (user 2026-10-02). */
+function SxCells({ r, isLock }: { r: SxSizeResult; isLock: boolean }) {
+  const [copied, setCopied] = useState(false);
+  const stakeText = r.sxStakeUsd.toFixed(2);
+
+  async function copyStake() {
+    try {
+      await navigator.clipboard.writeText(stakeText);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1200);
+    } catch {
+      // clipboard blocked (e.g. non-secure context) — silently ignore
+    }
+  }
+
+  return (
+    <>
+      <td className="col-shares mono">{fmtUsd(r.payoutUsd)}</td>
+      <td className="col-cost">
+        <button
+          type="button"
+          className={`shares-copy ${isLock ? '' : 'muted'}`}
+          onClick={copyStake}
+          title="Copy SX stake to clipboard"
+          aria-label="Copy SX stake"
+        >
+          <span className="mono">{fmtUsd(r.sxStakeUsd)}</span>
+          <span className="copy-hint">{copied ? '✓' : '⧉'}</span>
+        </button>
+      </td>
+      <td className={`col-profit mono ${r.lockProfit >= 0 ? 'pos' : 'neg'}`}>{fmtMoneyEur(r.lockProfit)}</td>
+      {/* SX refunds both legs on a void — nothing lost */}
+      <td className="col-void mono dim">€0.00</td>
+    </>
+  );
+}
+
 /** The original single-bet BOOST hedge calculator (2026-07). The EUR→USD rate is owned by App so
  *  both calculators (this and the rolling double) share one rate and one FX toast. */
 export function BoostCalc({ xeStr, setXeStr }: { xeStr: string; setXeStr: (s: string) => void }) {
@@ -120,7 +159,9 @@ export function BoostCalc({ xeStr, setXeStr }: { xeStr: string; setXeStr: (s: st
     const size = (stake: number) => sizeSx({ odds, sxOdds, isFreeBet, xe, stake });
     const rows = FIXED_STAKES.map((stake) => ({ stake, r: size(stake) }));
     const customRow = sxCustom !== null && sxCustom > 0 ? size(sxCustom) : null;
-    return { lock, breakeven: breakevenSxOdds(odds), rows, customRow };
+    // same depth reminder as the Poly panel: any SX stake shown above $50
+    const bigOrder = [...rows.map((x) => x.r), ...(customRow ? [customRow] : [])].some((x) => x.sxStakeUsd > 50);
+    return { lock, breakeven: breakevenSxOdds(odds), rows, customRow, bigOrder };
   }, [odds, xe, sxOdds, isFreeBet, sxCustom]);
 
   const inputsReady =
@@ -293,178 +334,164 @@ export function BoostCalc({ xeStr, setXeStr }: { xeStr: string; setXeStr: (s: st
         )}
       </section>
 
-      {/* Poly LEFT, SX RIGHT (user 2026-10-02) — side by side when the SX panel shows, stacked on a phone */}
+      {/* Poly LEFT, SX RIGHT (user 2026-10-02) — two cards of the SAME shape and size: title, verdict pill,
+          breakeven line, void line, the same five columns, a depth note. Stacked on a phone. */}
       <div className={`hedge-cols ${sxView ? 'two' : ''}`} data-testid="hedge-cols">
-      <div className="hedge-col">
-      {/* ---- Verdict ---- */}
-      {view && (
-        <section className="verdict">
-          <div className={view.lock.isLock ? 'pill lock' : 'pill dead'}>
-            {view.lock.isLock ? (
-              <>
-                LOCK{' '}
-                <span className="pill-pct">+{fmtPct(view.lock.marginPct)}%</span>
-              </>
-            ) : (
-              <>
-                DEAD{' '}
-                <span className="pill-pct">{fmtPct(view.lock.marginPct)}%</span>
-              </>
-            )}
-          </div>
-          <p className="breakeven">
-            Profitable if NO ≤ <strong>{fmtCents(view.breakeven)}¢</strong> (
-            {takerMaker})
-          </p>
-          {/* VOID TAIL — a void resolves the market 50-50, so the hedge leg alone decides
-              it and the LOCK % above says nothing about the damage. Both figures here are
-              stake-independent, so one line covers every row of the table. */}
-          <p
-            className={`void-tail ${
-              view.tail.tailEur > 0 && noPrice !== null && noPrice > VOID_WATCH_PRICE_CENTS
-                ? 'void-warn'
-                : ''
-            }`}
-          >
-            {view.tail.tailEur > 0 ? (
-              <>
-                Void tail <strong>{fmtPct(view.tail.tailPerStake, 2)}× stake</strong>
-                {view.tail.breakevenVoidProb !== null && (
+        {view ? (
+          <section className="card hedge-panel">
+            {sxView && <h3 className="panel-title">Hedge on Polymarket</h3>}
+            <div className="verdict">
+              <div className={view.lock.isLock ? 'pill lock' : 'pill dead'}>
+                {view.lock.isLock ? 'LOCK' : 'DEAD'}{' '}
+                <span className="pill-pct">{view.lock.isLock ? '+' : ''}{fmtPct(view.lock.marginPct)}%</span>
+              </div>
+              <p className="breakeven">
+                Profitable if NO ≤ <strong>{fmtCents(view.breakeven)}¢</strong> ({takerMaker})
+              </p>
+              {/* VOID TAIL — a void resolves the market 50-50, so the hedge leg alone decides
+                  it and the LOCK % above says nothing about the damage. Both figures here are
+                  stake-independent, so one line covers every row of the table. */}
+              <p
+                className={`void-tail ${
+                  view.tail.tailEur > 0 && noPrice !== null && noPrice > VOID_WATCH_PRICE_CENTS
+                    ? 'void-warn'
+                    : ''
+                }`}
+              >
+                {view.tail.tailEur > 0 ? (
                   <>
-                    {' — '}−EV if void chance &gt;{' '}
-                    <strong>{fmtPct(view.tail.breakevenVoidProb * 100)}%</strong>
-                  </>
-                )}
-              </>
-            ) : (
-              <>
-                Void <strong>pays</strong> {fmtPct(-view.tail.tailPerStake, 2)}× stake — hedge
-                bought under 50¢
-              </>
-            )}
-          </p>
-        </section>
-      )}
-
-      {/* ---- Results ---- */}
-      {view && (
-        <section className="card">
-          <table className="results">
-            <thead>
-              <tr>
-                <th>{isFreeBet ? 'FB face' : 'Stake'}</th>
-                <th>Shares</th>
-                <th>Hedge cost</th>
-                <th>Net profit</th>
-                <th>Void tail</th>
-              </tr>
-            </thead>
-            <tbody>
-              {FIXED_STAKES.map((s) => (
-                <tr key={s} className={view.lock.isLock ? '' : 'row-dead'}>
-                  <td className="col-stake">€{s}</td>
-                  <ResultCells inputs={view.inputs} stake={s} />
-                </tr>
-              ))}
-              <tr className={`custom-row ${view.lock.isLock ? '' : 'row-dead'}`}>
-                <td className="col-stake">
-                  <span className="euro-prefix">€</span>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    autoComplete="off"
-                    value={customStr}
-                    onChange={(e) => setCustomStr(e.target.value)}
-                    placeholder="custom"
-                    aria-label="Custom stake in euros"
-                  />
-                </td>
-                {custom !== null && custom > 0 ? (
-                  <ResultCells inputs={view.inputs} stake={custom} />
-                ) : (
-                  <>
-                    <td className="dim">—</td>
-                    <td className="dim">—</td>
-                    <td className="dim">—</td>
-                    <td className="dim">—</td>
-                  </>
-                )}
-              </tr>
-            </tbody>
-          </table>
-
-          {view.bigOrder && (
-            <p className="depth-note">
-              ⚠ Depth check: for orders &gt; $50, verify the book holds the size.
-            </p>
-          )}
-        </section>
-      )}
-
-      </div>
-
-      {/* ---- SX panel (2026-10-02): the same bet hedged on SX — same stakes and rate; its own custom stake ---- */}
-      {sxView && (
-        <section className="card sx-panel" data-testid="sx-panel">
-          <h3 className="panel-title">Hedge on SX</h3>
-          <div className={sxView.lock.isLock ? 'pill lock' : 'pill dead'}>
-            {sxView.lock.isLock ? 'LOCK' : 'DEAD'}{' '}
-            <span className="pill-pct">{sxView.lock.isLock ? '+' : ''}{fmtPct(sxView.lock.marginPct)}%</span>
-          </div>
-          <p className="breakeven">
-            Profitable if SX odds ≥ <strong>{Number.isFinite(sxView.breakeven) ? sxView.breakeven.toFixed(3) : '—'}</strong> (taker, 1% of winnings)
-          </p>
-          {/* SX refunds every leg on a cancel / draw / no contest, like the bookie — unlike Poly's 50-50 */}
-          <p className="void-tail">A void refunds both legs — <strong>no void tail</strong></p>
-          <table className="results">
-            <thead>
-              <tr>
-                <th>{isFreeBet ? 'FB face' : 'Stake'}</th>
-                <th>Stake on SX</th>
-                <th>SX returns</th>
-                <th>Net profit</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sxView.rows.map(({ stake, r }) => (
-                <tr key={stake} className={sxView.lock.isLock ? '' : 'row-dead'}>
-                  <td className="col-stake">€{stake}</td>
-                  <td className="col-cost mono">{fmtUsd(r.sxStakeUsd)}</td>
-                  <td className="col-shares mono">{fmtUsd(r.payoutUsd)}</td>
-                  <td className={`col-profit mono ${r.lockProfit >= 0 ? 'pos' : 'neg'}`}>{fmtMoneyEur(r.lockProfit)}</td>
-                </tr>
-              ))}
-              <tr className={`custom-row ${sxView.lock.isLock ? '' : 'row-dead'}`}>
-                <td className="col-stake">
-                  <span className="euro-prefix">€</span>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    autoComplete="off"
-                    value={sxCustomStr}
-                    onChange={(e) => setSxCustomStr(e.target.value)}
-                    placeholder="custom"
-                    aria-label="SX custom stake in euros"
-                  />
-                </td>
-                {sxView.customRow ? (
-                  <>
-                    <td className="col-cost mono">{fmtUsd(sxView.customRow.sxStakeUsd)}</td>
-                    <td className="col-shares mono">{fmtUsd(sxView.customRow.payoutUsd)}</td>
-                    <td className={`col-profit mono ${sxView.customRow.lockProfit >= 0 ? 'pos' : 'neg'}`}>{fmtMoneyEur(sxView.customRow.lockProfit)}</td>
+                    Void tail <strong>{fmtPct(view.tail.tailPerStake, 2)}× stake</strong>
+                    {view.tail.breakevenVoidProb !== null && (
+                      <>
+                        {' — '}−EV if void chance &gt;{' '}
+                        <strong>{fmtPct(view.tail.breakevenVoidProb * 100)}%</strong>
+                      </>
+                    )}
                   </>
                 ) : (
                   <>
-                    <td className="dim">—</td>
-                    <td className="dim">—</td>
-                    <td className="dim">—</td>
+                    Void <strong>pays</strong> {fmtPct(-view.tail.tailPerStake, 2)}× stake — hedge
+                    bought under 50¢
                   </>
                 )}
-              </tr>
-            </tbody>
-          </table>
-        </section>
-      )}
+              </p>
+            </div>
+            <table className="results">
+              <thead>
+                <tr>
+                  <th>{isFreeBet ? 'FB face' : 'Stake'}</th>
+                  <th>Shares</th>
+                  <th>Hedge cost</th>
+                  <th>Net profit</th>
+                  <th>Void tail</th>
+                </tr>
+              </thead>
+              <tbody>
+                {FIXED_STAKES.map((s) => (
+                  <tr key={s} className={view.lock.isLock ? '' : 'row-dead'}>
+                    <td className="col-stake">€{s}</td>
+                    <ResultCells inputs={view.inputs} stake={s} />
+                  </tr>
+                ))}
+                <tr className={`custom-row ${view.lock.isLock ? '' : 'row-dead'}`}>
+                  <td className="col-stake">
+                    <span className="euro-prefix">€</span>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      autoComplete="off"
+                      value={customStr}
+                      onChange={(e) => setCustomStr(e.target.value)}
+                      placeholder="custom"
+                      aria-label="Custom stake in euros"
+                    />
+                  </td>
+                  {custom !== null && custom > 0 ? (
+                    <ResultCells inputs={view.inputs} stake={custom} />
+                  ) : (
+                    <>
+                      <td className="dim">—</td>
+                      <td className="dim">—</td>
+                      <td className="dim">—</td>
+                      <td className="dim">—</td>
+                    </>
+                  )}
+                </tr>
+              </tbody>
+            </table>
+            {view.bigOrder && (
+              <p className="depth-note">⚠ Depth check: for orders &gt; $50, verify the book holds the size.</p>
+            )}
+          </section>
+        ) : (
+          // SX odds filled, Poly NO not (or invalid): keep the left slot so SX stays on the right
+          sxView && <div className="hedge-panel" />
+        )}
+
+        {/* ---- SX panel (2026-10-02): the same bet hedged on SX — same stakes and rate; its own custom stake ---- */}
+        {sxView && (
+          <section className="card hedge-panel sx-panel" data-testid="sx-panel">
+            <h3 className="panel-title">Hedge on SX</h3>
+            <div className="verdict">
+              <div className={sxView.lock.isLock ? 'pill lock' : 'pill dead'}>
+                {sxView.lock.isLock ? 'LOCK' : 'DEAD'}{' '}
+                <span className="pill-pct">{sxView.lock.isLock ? '+' : ''}{fmtPct(sxView.lock.marginPct)}%</span>
+              </div>
+              <p className="breakeven">
+                Profitable if SX odds ≥ <strong>{Number.isFinite(sxView.breakeven) ? sxView.breakeven.toFixed(3) : '—'}</strong> (taker, 1% of winnings)
+              </p>
+              {/* SX refunds every leg on a cancel / draw / no contest, like the bookie — unlike Poly's 50-50 */}
+              <p className="void-tail">A void refunds both legs — <strong>no void tail</strong></p>
+            </div>
+            <table className="results">
+              <thead>
+                <tr>
+                  <th>{isFreeBet ? 'FB face' : 'Stake'}</th>
+                  {/* the SX bet's return = the bookie payout — the same figure as Poly's share count */}
+                  <th>Returns</th>
+                  <th>Stake on SX</th>
+                  <th>Net profit</th>
+                  <th>Void tail</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sxView.rows.map(({ stake, r }) => (
+                  <tr key={stake} className={sxView.lock.isLock ? '' : 'row-dead'}>
+                    <td className="col-stake">€{stake}</td>
+                    <SxCells r={r} isLock={sxView.lock.isLock} />
+                  </tr>
+                ))}
+                <tr className={`custom-row ${sxView.lock.isLock ? '' : 'row-dead'}`}>
+                  <td className="col-stake">
+                    <span className="euro-prefix">€</span>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      autoComplete="off"
+                      value={sxCustomStr}
+                      onChange={(e) => setSxCustomStr(e.target.value)}
+                      placeholder="custom"
+                      aria-label="SX custom stake in euros"
+                    />
+                  </td>
+                  {sxView.customRow ? (
+                    <SxCells r={sxView.customRow} isLock={sxView.lock.isLock} />
+                  ) : (
+                    <>
+                      <td className="dim">—</td>
+                      <td className="dim">—</td>
+                      <td className="dim">—</td>
+                      <td className="dim">—</td>
+                    </>
+                  )}
+                </tr>
+              </tbody>
+            </table>
+            {sxView.bigOrder && (
+              <p className="depth-note">⚠ Depth check: for orders &gt; $50, verify the SX book holds the size.</p>
+            )}
+          </section>
+        )}
       </div>
 
     </>

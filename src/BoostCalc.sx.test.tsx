@@ -58,6 +58,18 @@ describe('BoostCalc — the SX panel', () => {
     expect((screen.getByLabelText('Custom stake in euros') as HTMLInputElement).value).toBe('50');
   });
 
+  it('the SX stake copies like Poly shares — the bare number, no "$"', async () => {
+    let copied = '';
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (t: string) => { copied = t; } } });
+    setup();
+    typeSx('2.05');
+    const buttons = within(screen.getByTestId('sx-panel')).getAllByLabelText('Copy SX stake');
+    expect(buttons).toHaveLength(3);                          // €10, €20, custom
+    fireEvent.click(buttons[0]);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(copied).toBe('14.50');                             // €10 at 2.05, xe 1.16
+  });
+
   it('Poly and SX sit side by side (Poly left, SX right)', () => {
     setup();
     typeSx('2.05');

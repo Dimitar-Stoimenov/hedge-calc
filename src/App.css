@@ -34,16 +34,20 @@
   gap: 10px;
 }
 
-/* ---- SX panel (2026-10-02): the same bet hedged on SX — the board's SX light blue, so it never reads as Poly ---- */
+/* ---- Hedge panels (2026-10-02): Poly and SX cards share ONE shape — title, verdict, table, depth note ---- */
+.panel-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--accent);
+}
+/* SX in the board's SX light blue, so it never reads as Poly */
 .sx-panel {
   border-color: #63b3ed;
 }
 .sx-panel .panel-title {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 700;
   color: #63b3ed;
-  letter-spacing: 0.02em;
 }
 
 /* ---- Fields ---- */
@@ -576,32 +580,30 @@ textarea:focus {
   box-shadow: 0 0 0 3px var(--accent-bg);
 }
 
-/* ---- Poly | SX side by side (user 2026-10-02: "poly left, right sx") ----
+/* ---- Poly | SX side by side (user 2026-10-02: "poly left, right sx", same width and height) ----
    The app widens only while the SX panel shows; the inputs stay at the usual width, and on a phone the two
-   panels stack (Poly on top), since two 420px tables cannot fit side by side there. */
+   cards stack (Poly on top), since two five-column tables cannot fit side by side there. */
 .hedge-cols {
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
-.hedge-col {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+.hedge-panel {
   min-width: 0;
 }
 @media (min-width: 760px) {
   .app:has(.hedge-cols.two) {
-    max-width: 860px;
+    max-width: 880px;
   }
   .app:has(.hedge-cols.two) .inputs-card {
     width: 100%;
     max-width: 392px;
     align-self: center;
   }
+  /* equal columns; grid rows stretch, so both cards are the height of the taller one */
   .hedge-cols.two {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    align-items: start;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: stretch;
   }
 }
