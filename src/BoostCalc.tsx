@@ -93,12 +93,15 @@ export function BoostCalc({ xeStr, setXeStr }: { xeStr: string; setXeStr: (s: st
   const [advOpen, setAdvOpen] = useState(false);
   // SX (2026-10-02): the decimal odds sx.bet shows for backing the OTHER side. Empty = no SX panel.
   const [sxStr, setSxStr] = useState('');
+  // the SX panel's own custom stake (user 2026-10-02) — independent of the Poly custom row
+  const [sxCustomStr, setSxCustomStr] = useState('50');
 
   const odds = parseNum(oddsStr);
   const noPrice = parseNum(noStr);
   const xe = parseNum(xeStr);
   const custom = parseNum(customStr);
   const sxOdds = parseNum(sxStr);
+  const sxCustom = parseNum(sxCustomStr);
   const feeRate = FEE_RATES[market];
 
   // Validation — gentle hints, never crash.
@@ -114,10 +117,11 @@ export function BoostCalc({ xeStr, setXeStr }: { xeStr: string; setXeStr: (s: st
   const sxView = useMemo(() => {
     if (odds === null || odds <= 1 || xe === null || xe <= 0 || sxOdds === null || sxOdds <= 1) return null;
     const lock = lockTest(odds, sxCostPerDollar(sxOdds));
-    const stakes = [...FIXED_STAKES, ...(custom !== null && custom > 0 ? [custom] : [])];
-    const rows = stakes.map((stake) => ({ stake, r: sizeSx({ odds, sxOdds, isFreeBet, xe, stake }) }));
-    return { lock, breakeven: breakevenSxOdds(odds), rows };
-  }, [odds, xe, sxOdds, isFreeBet, custom]);
+    const size = (stake: number) => sizeSx({ odds, sxOdds, isFreeBet, xe, stake });
+    const rows = FIXED_STAKES.map((stake) => ({ stake, r: size(stake) }));
+    const customRow = sxCustom !== null && sxCustom > 0 ? size(sxCustom) : null;
+    return { lock, breakeven: breakevenSxOdds(odds), rows, customRow };
+  }, [odds, xe, sxOdds, isFreeBet, sxCustom]);
 
   const inputsReady =
     odds !== null &&
@@ -173,7 +177,7 @@ export function BoostCalc({ xeStr, setXeStr }: { xeStr: string; setXeStr: (s: st
     <>
 
       {/* ---- Inputs ---- */}
-      <section className="card">
+      <section className="card inputs-card">
         <div className="grid2">
           <label className="field">
             <span className="field-label">Boost odds</span>
@@ -289,6 +293,9 @@ export function BoostCalc({ xeStr, setXeStr }: { xeStr: string; setXeStr: (s: st
         )}
       </section>
 
+      {/* Poly LEFT, SX RIGHT (user 2026-10-02) — side by side when the SX panel shows, stacked on a phone */}
+      <div className={`hedge-cols ${sxView ? 'two' : ''}`} data-testid="hedge-cols">
+      <div className="hedge-col">
       {/* ---- Verdict ---- */}
       {view && (
         <section className="verdict">
@@ -394,7 +401,9 @@ export function BoostCalc({ xeStr, setXeStr }: { xeStr: string; setXeStr: (s: st
         </section>
       )}
 
-      {/* ---- SX panel (2026-10-02): the same bet hedged on SX — same stakes, same rate, no inputs of its own ---- */}
+      </div>
+
+      {/* ---- SX panel (2026-10-02): the same bet hedged on SX — same stakes and rate; its own custom stake ---- */}
       {sxView && (
         <section className="card sx-panel" data-testid="sx-panel">
           <h3 className="panel-title">Hedge on SX</h3>
@@ -425,10 +434,38 @@ export function BoostCalc({ xeStr, setXeStr }: { xeStr: string; setXeStr: (s: st
                   <td className={`col-profit mono ${r.lockProfit >= 0 ? 'pos' : 'neg'}`}>{fmtMoneyEur(r.lockProfit)}</td>
                 </tr>
               ))}
+              <tr className={`custom-row ${sxView.lock.isLock ? '' : 'row-dead'}`}>
+                <td className="col-stake">
+                  <span className="euro-prefix">€</span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    autoComplete="off"
+                    value={sxCustomStr}
+                    onChange={(e) => setSxCustomStr(e.target.value)}
+                    placeholder="custom"
+                    aria-label="SX custom stake in euros"
+                  />
+                </td>
+                {sxView.customRow ? (
+                  <>
+                    <td className="col-cost mono">{fmtUsd(sxView.customRow.sxStakeUsd)}</td>
+                    <td className="col-shares mono">{fmtUsd(sxView.customRow.payoutUsd)}</td>
+                    <td className={`col-profit mono ${sxView.customRow.lockProfit >= 0 ? 'pos' : 'neg'}`}>{fmtMoneyEur(sxView.customRow.lockProfit)}</td>
+                  </>
+                ) : (
+                  <>
+                    <td className="dim">—</td>
+                    <td className="dim">—</td>
+                    <td className="dim">—</td>
+                  </>
+                )}
+              </tr>
             </tbody>
           </table>
         </section>
       )}
+      </div>
 
     </>
   );

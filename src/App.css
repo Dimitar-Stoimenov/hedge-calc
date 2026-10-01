@@ -575,3 +575,33 @@ textarea:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-bg);
 }
+
+/* ---- Poly | SX side by side (user 2026-10-02: "poly left, right sx") ----
+   The app widens only while the SX panel shows; the inputs stay at the usual width, and on a phone the two
+   panels stack (Poly on top), since two 420px tables cannot fit side by side there. */
+.hedge-cols {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.hedge-col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+@media (min-width: 760px) {
+  .app:has(.hedge-cols.two) {
+    max-width: 860px;
+  }
+  .app:has(.hedge-cols.two) .inputs-card {
+    width: 100%;
+    max-width: 392px;
+    align-self: center;
+  }
+  .hedge-cols.two {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
+  }
+}

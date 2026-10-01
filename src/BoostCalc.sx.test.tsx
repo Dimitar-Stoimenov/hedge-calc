@@ -44,6 +44,29 @@ describe('BoostCalc — the SX panel', () => {
     expect(panel.textContent).toMatch(/DEAD/);
   });
 
+  it('the SX panel has its OWN custom stake (default €50), independent of the Poly custom row', () => {
+    setup();
+    typeSx('2.05');
+    const panel = screen.getByTestId('sx-panel');
+    const input = within(panel).getByLabelText('SX custom stake in euros') as HTMLInputElement;
+    expect(input.value).toBe('50');
+    fireEvent.change(input, { target: { value: '30' } });
+    // €30 → payout 30·2.55·1.16 = $88.74 → SX stake 88.74 / 2.0395 = $43.51
+    expect(panel.textContent).toContain('$88.74');
+    expect(panel.textContent).toContain('$43.51');
+    // the Poly custom row is untouched
+    expect((screen.getByLabelText('Custom stake in euros') as HTMLInputElement).value).toBe('50');
+  });
+
+  it('Poly and SX sit side by side (Poly left, SX right)', () => {
+    setup();
+    typeSx('2.05');
+    const cols = screen.getByTestId('hedge-cols');
+    expect(cols.className).toContain('two');
+    expect(cols.lastElementChild?.getAttribute('data-testid')).toBe('sx-panel');
+    expect(cols.firstElementChild?.textContent).toMatch(/Profitable if NO ≤/);
+  });
+
   it('a comma decimal works (mobile), and odds ≤ 1 hide the panel with a hint', () => {
     setup();
     typeSx('2,05');
