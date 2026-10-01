@@ -34,6 +34,18 @@
   gap: 10px;
 }
 
+/* ---- SX panel (2026-10-02): the same bet hedged on SX — the board's SX light blue, so it never reads as Poly ---- */
+.sx-panel {
+  border-color: #63b3ed;
+}
+.sx-panel .panel-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: #63b3ed;
+  letter-spacing: 0.02em;
+}
+
 /* ---- Fields ---- */
 .field {
   display: flex;

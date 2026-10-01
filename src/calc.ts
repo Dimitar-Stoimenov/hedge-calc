@@ -268,3 +268,63 @@ export function voidTail(size: SizeResult, stake: number, xe: number): VoidTailR
 function clamp(x: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, x));
 }
+
+// ─── SX AS THE HEDGE (2026-10-02) ─────────────────────────────────────────────────────────────────
+// Back the OTHER side on SX Bet (an exchange) at decimal odds D instead of buying Poly NO. SX charges a
+// taker 1% of the WINNING PROFIT only (SX fee docs; makers 0%, a losing bet pays nothing), so a winning
+// $1 stake returns 1 + 0.99·(D − 1). The SX stake is sized so that win pays exactly the bookie payout —
+// the same balanced hedge as Poly's shares, with "$1 of payout" playing the role of one share.
+
+/** SX's taker fee, a fraction of the winning profit. */
+export const SX_TAKER_FEE = 0.01;
+
+/** What $1 of payout costs on SX at decimal odds D: 1 / (1 + 0.99·(D − 1)). The lock test's pEff. */
+export function sxCostPerDollar(sxOdds: number): number {
+  return 1 / (1 + (1 - SX_TAKER_FEE) * (sxOdds - 1));
+}
+
+export interface SxSizeInput {
+  odds: number;
+  /** SX decimal odds for backing the other side (> 1) */
+  sxOdds: number;
+  isFreeBet: boolean;
+  /** EUR -> USD rate */
+  xe: number;
+  /** stake in EUR (for a free bet, the free-bet face value) */
+  stake: number;
+}
+
+export interface SxSizeResult {
+  /** USD the SX bet must return = the bookie payout (normal: stake·odds·xe; free bet: stake·(odds−1)·xe) */
+  payoutUsd: number;
+  /** USD to stake on SX at sxOdds */
+  sxStakeUsd: number;
+  /** cost per $1 of payout (fee included) */
+  costPerDollar: number;
+  bookieWinsNet: number;
+  hedgeWinsNet: number;
+  lockProfit: number;
+}
+
+/** Size a balanced SX hedge — sizePosition's formulas with the SX cost per $1 in place of Poly's pEff. */
+export function sizeSx(input: SxSizeInput): SxSizeResult {
+  const { odds, sxOdds, isFreeBet, xe, stake } = input;
+  const costPerDollar = sxCostPerDollar(sxOdds);
+  const payoutUsd = isFreeBet ? stake * (odds - 1) * xe : stake * odds * xe;
+  const sxStakeUsd = payoutUsd * costPerDollar;
+  const bookieWinsNet = stake * (odds - 1) - sxStakeUsd / xe;
+  const hedgeWinsNet = isFreeBet
+    ? (payoutUsd - sxStakeUsd) / xe
+    : -stake + (payoutUsd - sxStakeUsd) / xe;
+  return { payoutUsd, sxStakeUsd, costPerDollar, bookieWinsNet, hedgeWinsNet, lockProfit: Math.min(bookieWinsNet, hedgeWinsNet) };
+}
+
+/**
+ * The LOWEST SX odds that still lock. Closed form: lock ⇔ odds·(1 − c) ≥ LOCK_THRESHOLD ⇔ c ≤ 1 − LOCK_THRESHOLD/odds,
+ * and c = 1/(1 + 0.99·(D − 1)) ⇔ D = 1 + (1/c − 1)/0.99. Infinity when no SX price can lock (odds ≤ the threshold).
+ */
+export function breakevenSxOdds(odds: number): number {
+  const cMax = 1 - LOCK_THRESHOLD / odds;
+  if (!(cMax > 0)) return Infinity;
+  return 1 + (1 / cMax - 1) / (1 - SX_TAKER_FEE);
+}

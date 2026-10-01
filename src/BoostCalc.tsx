@@ -4,8 +4,11 @@ import {
   FEE_RATES,
   MARKET_TYPES,
   breakevenNo,
+  breakevenSxOdds,
   lockTest,
   sizePosition,
+  sizeSx,
+  sxCostPerDollar,
   effectivePrice,
   voidTail,
   VOID_WATCH_PRICE_CENTS,
@@ -88,11 +91,14 @@ export function BoostCalc({ xeStr, setXeStr }: { xeStr: string; setXeStr: (s: st
   const [isFreeBet, setIsFreeBet] = useState(false);
   const [customStr, setCustomStr] = useState('50');
   const [advOpen, setAdvOpen] = useState(false);
+  // SX (2026-10-02): the decimal odds sx.bet shows for backing the OTHER side. Empty = no SX panel.
+  const [sxStr, setSxStr] = useState('');
 
   const odds = parseNum(oddsStr);
   const noPrice = parseNum(noStr);
   const xe = parseNum(xeStr);
   const custom = parseNum(customStr);
+  const sxOdds = parseNum(sxStr);
   const feeRate = FEE_RATES[market];
 
   // Validation — gentle hints, never crash.
@@ -101,6 +107,17 @@ export function BoostCalc({ xeStr, setXeStr }: { xeStr: string; setXeStr: (s: st
   if (noPrice !== null && (noPrice <= 0 || noPrice >= 100))
     errors.push('NO price must be between 0 and 100¢.');
   if (xe !== null && xe <= 0) errors.push('Exchange rate must be greater than 0.');
+  if (sxOdds !== null && sxOdds <= 1) errors.push('SX odds must be greater than 1.');
+
+  // THE SX PANEL — the same boost odds, stakes and rate, hedged on SX instead of Poly. Independent of the Poly NO
+  // price: either panel shows as soon as its own hedge price is filled in.
+  const sxView = useMemo(() => {
+    if (odds === null || odds <= 1 || xe === null || xe <= 0 || sxOdds === null || sxOdds <= 1) return null;
+    const lock = lockTest(odds, sxCostPerDollar(sxOdds));
+    const stakes = [...FIXED_STAKES, ...(custom !== null && custom > 0 ? [custom] : [])];
+    const rows = stakes.map((stake) => ({ stake, r: sizeSx({ odds, sxOdds, isFreeBet, xe, stake }) }));
+    return { lock, breakeven: breakevenSxOdds(odds), rows };
+  }, [odds, xe, sxOdds, isFreeBet, custom]);
 
   const inputsReady =
     odds !== null &&
@@ -182,6 +199,20 @@ export function BoostCalc({ xeStr, setXeStr }: { xeStr: string; setXeStr: (s: st
             />
           </label>
         </div>
+
+        {/* SX (2026-10-02): the decimal odds for backing the OTHER side on sx.bet — fills the SX panel below */}
+        <label className="field">
+          <span className="field-label">SX odds</span>
+          <input
+            type="text"
+            inputMode="decimal"
+            autoComplete="off"
+            value={sxStr}
+            onChange={(e) => setSxStr(e.target.value)}
+            placeholder="optional, e.g. 2.05"
+            aria-label="SX odds"
+          />
+        </label>
 
         <label className="field">
           <span className="field-label">Market type</span>
@@ -360,6 +391,42 @@ export function BoostCalc({ xeStr, setXeStr }: { xeStr: string; setXeStr: (s: st
               ⚠ Depth check: for orders &gt; $50, verify the book holds the size.
             </p>
           )}
+        </section>
+      )}
+
+      {/* ---- SX panel (2026-10-02): the same bet hedged on SX — same stakes, same rate, no inputs of its own ---- */}
+      {sxView && (
+        <section className="card sx-panel" data-testid="sx-panel">
+          <h3 className="panel-title">Hedge on SX</h3>
+          <div className={sxView.lock.isLock ? 'pill lock' : 'pill dead'}>
+            {sxView.lock.isLock ? 'LOCK' : 'DEAD'}{' '}
+            <span className="pill-pct">{sxView.lock.isLock ? '+' : ''}{fmtPct(sxView.lock.marginPct)}%</span>
+          </div>
+          <p className="breakeven">
+            Profitable if SX odds ≥ <strong>{Number.isFinite(sxView.breakeven) ? sxView.breakeven.toFixed(3) : '—'}</strong> (taker, 1% of winnings)
+          </p>
+          {/* SX refunds every leg on a cancel / draw / no contest, like the bookie — unlike Poly's 50-50 */}
+          <p className="void-tail">A void refunds both legs — <strong>no void tail</strong></p>
+          <table className="results">
+            <thead>
+              <tr>
+                <th>{isFreeBet ? 'FB face' : 'Stake'}</th>
+                <th>Stake on SX</th>
+                <th>SX returns</th>
+                <th>Net profit</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sxView.rows.map(({ stake, r }) => (
+                <tr key={stake} className={sxView.lock.isLock ? '' : 'row-dead'}>
+                  <td className="col-stake">€{stake}</td>
+                  <td className="col-cost mono">{fmtUsd(r.sxStakeUsd)}</td>
+                  <td className="col-shares mono">{fmtUsd(r.payoutUsd)}</td>
+                  <td className={`col-profit mono ${r.lockProfit >= 0 ? 'pos' : 'neg'}`}>{fmtMoneyEur(r.lockProfit)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </section>
       )}
 
