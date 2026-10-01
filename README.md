@@ -12,10 +12,11 @@ summary to paste into a bet log. Math in [src/rolling.ts](src/rolling.ts), pinne
 example in [src/rolling.test.ts](src/rolling.test.ts) and swept over thousands of random positions by an
 independent cash-flow replay in [src/rolling.invariants.test.ts](src/rolling.invariants.test.ts).
 
-**SX as the hedge** (2026-10-02): an optional **SX odds** field (decimal, the odds for backing the other side on
-sx.bet) adds a second panel under the Poly results, driven by the same boost odds, stakes and rate: its own LOCK %, the
+**SX as the hedge** (2026-10-02): an optional **SX %** field (the price in percent of the side backed on sx.bet, up to 3
+decimals, used exactly as typed — SX shows percent; typing rounded decimal odds such as 2.13 for a real 2.1333 mis-sized
+the stake; the maths converts with odds = 100 / %) adds a second panel under the Poly results, driven by the same boost odds, stakes and rate: its own LOCK %, the
 **stake to place on SX** per row (sized so the SX win pays the bookie payout — SX takes 1% of the winnings only:
-cost per $1 = 1 / (1 + 0.99·(odds − 1))), the breakeven SX odds, and no void tail (SX refunds on a void, like the
+cost per $1 = 1 / (1 + 0.99·(odds − 1))), the breakeven as the highest SX % that still locks, the fee-included ¢ per $1 payout, and no void tail (SX refunds on a void, like the
 bookie). Math in [src/calc.ts](src/calc.ts) (`sizeSx`, `breakevenSxOdds`), pinned in [src/calc.sx.test.ts](src/calc.sx.test.ts).
 
 No backend, no storage — the only network call is the EUR→USD rate on load.
