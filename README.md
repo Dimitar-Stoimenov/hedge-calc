@@ -19,6 +19,13 @@ the stake; the maths converts with odds = 100 / %) adds a second panel under the
 cost per $1 = 1 / (1 + 0.99·(odds − 1))), the breakeven as the highest SX % that still locks, the fee-included ¢ per $1 payout, and no void tail (SX refunds on a void, like the
 bookie). Math in [src/calc.ts](src/calc.ts) (`sizeSx`, `breakevenSxOdds`), pinned in [src/calc.sx.test.ts](src/calc.sx.test.ts).
 
+**Bookie vs bookie** (2026-10-03): decimal vs decimal — one market backed at two bookies (or three, 1X2). Leg A's
+stake as typed (default €10) or a total stake; every other leg is sized to pay the same and rounded to a multiple of
+**€0.10**, floor or ceil, whichever keeps the higher worst-case profit — the same rule as the live scanner's
+bookie-vs-bookie rows. Shows the exact lock %, the rounded worst case, per-leg stake (⧉ copies the bare number),
+returns and profit, the breakeven odds for the last leg, and an optional free-bet leg A. Euro only. Math in
+[src/calc.ts](src/calc.ts) (`sizeDecimalArb`), pinned in [src/calc.decimal.test.ts](src/calc.decimal.test.ts).
+
 No backend, no storage — the only network call is the EUR→USD rate on load.
 
 ## Develop

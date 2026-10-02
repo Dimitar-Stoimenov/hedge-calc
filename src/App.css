@@ -67,6 +67,12 @@
   grid-template-columns: 1fr 1fr;
   gap: 10px;
 }
+/* Bookie vs bookie, 3-way: one odds input per outcome */
+.grid3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+}
 
 /* Inputs are type=text + inputMode=decimal (not type=number) so mobile keyboards
    that use a comma decimal separator don't reject or clear the field. */

@@ -328,3 +328,107 @@ export function breakevenSxOdds(odds: number): number {
   if (!(cMax > 0)) return Infinity;
   return 1 + (1 / cMax - 1) / (1 - SX_TAKER_FEE);
 }
+
+// ─── BOOKIE vs BOOKIE — DECIMAL vs DECIMAL (2026-10-03) ──────────────────────────────────────────
+// Back every outcome of one market at two (or three, 1X2) bookies. Euro only, no fees, no FX. The SAME sizing rule as
+// the live scanner's bookie-vs-bookie rows (user 2026-10-03): leg A is fixed (default €10); every other leg is sized to
+// pay the same and then ROUNDED TO A MULTIPLE OF €0.10 — floor or ceil, whichever keeps the higher WORST-CASE profit.
+
+/** Every non-lead stake is a whole multiple of this. */
+export const DECIMAL_STEP_EUR = 0.1;
+
+export interface DecimalArbInput {
+  /** decimal odds per leg, leg A first */
+  odds: number[];
+  /** 'lead' = `amount` is leg A's stake (the free-bet face with freeBetLead); 'total' = `amount` is the total CASH */
+  mode: 'lead' | 'total';
+  amount: number;
+  /** leg A is a free bet: its stake is not returned (it returns stake × (odds − 1)) and is not cash */
+  freeBetLead?: boolean;
+}
+
+export interface DecimalArbSizing {
+  stakes: number[];
+  /** what each leg returns if it wins */
+  returns: number[];
+  /** net profit on each outcome (that leg wins) */
+  profitsEur: number[];
+  /** cash staked (a free-bet leg A excluded) */
+  totalEur: number;
+}
+
+export interface DecimalArbResult {
+  isLock: boolean;
+  /** the exact (unrounded) lock: of the cash staked, or of the free-bet face with freeBetLead */
+  exactProfitPct: number;
+  exact: DecimalArbSizing & { profitEur: number };
+  rounded: DecimalArbSizing & { worstProfitEur: number; worstProfitPct: number };
+  /** the LOWEST odds for the last leg that still lock against the others (Infinity = none can) */
+  breakevenLast: number;
+}
+
+/** Size a decimal-odds arb; see the section note above for the rounding rule. */
+export function sizeDecimalArb(input: DecimalArbInput): DecimalArbResult {
+  const { odds, mode, amount } = input;
+  const fb = input.freeBetLead === true;
+  // Per-unit payout of each leg: a free-bet leg A pays only its winnings.
+  const pay = odds.map((o, i) => (fb && i === 0 ? o - 1 : o));
+  const cashLegs = odds.map((_, i) => !(fb && i === 0));
+
+  const size = (stakes: number[]): DecimalArbSizing => {
+    const returns = stakes.map((s, i) => s * pay[i]);
+    const totalEur = stakes.reduce((t, s, i) => t + (cashLegs[i] ? s : 0), 0);
+    return { stakes, returns, profitsEur: returns.map((r) => r - totalEur), totalEur };
+  };
+
+  // EXACT: every outcome returns the same R.
+  let lead: number;
+  if (mode === 'lead') lead = amount;
+  else {
+    // total CASH = R · Σ_{cash legs} 1/payᵢ  →  R = amount / that sum; leg A = R / pay_A
+    const inv = pay.reduce((t, p, i) => t + (cashLegs[i] ? 1 / p : 0), 0);
+    lead = amount / inv / pay[0];
+  }
+  const R = lead * pay[0];
+  const exactSizing = size(pay.map((p) => R / p));
+  const exactProfitEur = R - exactSizing.totalEur;
+
+  // ROUNDED: leg A as typed ('lead') or to the nearest €0.10 ('total'); the others floor/ceil to €0.10, every
+  // combination tried, the higher worst case wins (a tie keeps the smaller outlay).
+  const step = Math.round(DECIMAL_STEP_EUR * 100);
+  const leadC = mode === 'lead' ? lead * 100 : Math.max(step, Math.round((lead * 100) / step) * step);
+  const options: number[][] = [[leadC]];
+  for (let i = 1; i < odds.length; i++) {
+    const ideal = (leadC * pay[0]) / pay[i];
+    const lo = Math.max(step, Math.floor(ideal / step + 1e-9) * step);
+    options.push(lo >= ideal - 1e-9 ? [lo] : [lo, lo + step]);
+  }
+  let best: { sizing: DecimalArbSizing; worst: number } | null = null;
+  const walk = (i: number, picked: number[]) => {
+    if (i === options.length) {
+      const sizing = size(picked.map((c) => c / 100));
+      const worst = Math.min(...sizing.profitsEur);
+      if (!best || worst > best.worst + 1e-9 || (Math.abs(worst - best.worst) <= 1e-9 && sizing.totalEur < best.sizing.totalEur)) best = { sizing, worst };
+      return;
+    }
+    for (const c of options[i]) { picked.push(c); walk(i + 1, picked); picked.pop(); }
+  };
+  walk(0, []);
+  const b = best as unknown as { sizing: DecimalArbSizing; worst: number };
+  const base = fb ? b.sizing.stakes[0] : b.sizing.totalEur;
+
+  // Lock iff the CASH per unit of balanced return is below one unit (a free-bet leg A costs nothing, so it is left out).
+  const k = pay.reduce((t, p, i) => t + (cashLegs[i] ? 1 / p : 0), 0);
+  const isLock = k < 1;
+  // Breakeven last leg: Σ over the OTHER cash legs + 1/o_last = 1.
+  const others = pay.slice(0, -1).reduce((t, p, i) => t + (cashLegs[i] ? 1 / p : 0), 0);
+  const breakevenLast = others < 1 ? 1 / (1 - others) : Infinity;
+
+  return {
+    isLock,
+    exactProfitPct: fb ? (exactProfitEur / lead) * 100 : (1 / k - 1) * 100,
+    exact: { ...exactSizing, profitEur: exactProfitEur },
+    rounded: { ...b.sizing, worstProfitEur: b.worst, worstProfitPct: base > 0 ? (b.worst / base) * 100 : 0 },
+    breakevenLast,
+  };
+}
