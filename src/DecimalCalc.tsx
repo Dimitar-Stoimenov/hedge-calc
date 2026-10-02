@@ -1,9 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { sizeDecimalArb } from './calc';
 import { fmtMoneyEur, fmtPct } from './format';
 import { parseNum } from './parse';
 
-const LEG_NAMES = ['A', 'B', 'C'];
+const LEG_NAMES = ['A', 'B'];
 
 /** One stake cell: the bare number copies (what gets typed into the bookie), like the SX stake. */
 function StakeCopy({ eur, isLock }: { eur: number; isLock: boolean }) {
@@ -32,8 +32,9 @@ function StakeCopy({ eur, isLock }: { eur: number; isLock: boolean }) {
  * multiple of €0.10, floor or ceil, whichever keeps the higher worst case. Euro only — both legs are bookies.
  */
 export function DecimalCalc() {
-  const [ways, setWays] = useState<2 | 3>(2);
-  const [oddsStr, setOddsStr] = useState(['2.10', '2.25', '']);
+  // TWO legs only (user 2026-10-03: "remove the calc 3 way") — the same rule as the live scanner's rows.
+  const ways = 2;
+  const [oddsStr, setOddsStr] = useState(['2.10', '2.25']);
   const [mode, setMode] = useState<'lead' | 'total'>('lead');
   const [leadStr, setLeadStr] = useState('10');
   const [totalStr, setTotalStr] = useState('100');
@@ -47,11 +48,8 @@ export function DecimalCalc() {
   if (amount !== null && amount <= 0) errors.push('Stake must be greater than 0.');
 
   const ready = odds.every((o) => o !== null && o > 1) && amount !== null && amount > 0;
-  const r = useMemo(
-    () => (ready ? sizeDecimalArb({ odds: odds as number[], mode, amount: amount as number, freeBetLead: freeBet }) : null),
-    // odds is rebuilt every render; its inputs are the strings
-    [ready, oddsStr.join('|'), ways, mode, amount, freeBet],
-  );
+  // two legs × floor/ceil — cheap enough to size on every render
+  const r = ready ? sizeDecimalArb({ odds: odds as number[], mode, amount: amount as number, freeBetLead: freeBet }) : null;
 
   const setOdd = (i: number, v: string) => setOddsStr((xs) => xs.map((x, j) => (j === i ? v : x)));
   const last = LEG_NAMES[ways - 1];
@@ -60,14 +58,7 @@ export function DecimalCalc() {
   return (
     <>
       <section className="card inputs-card">
-        <div className="toggle-row">
-          <div className="segmented" role="group" aria-label="Outcomes">
-            <button type="button" className={ways === 2 ? 'seg on' : 'seg'} onClick={() => setWays(2)}>2-way</button>
-            <button type="button" className={ways === 3 ? 'seg on' : 'seg'} onClick={() => setWays(3)}>3-way (1X2)</button>
-          </div>
-        </div>
-
-        <div className={ways === 3 ? 'grid3' : 'grid2'}>
+        <div className="grid2">
           {LEG_NAMES.slice(0, ways).map((name, i) => (
             <label className="field" key={name}>
               <span className="field-label">Leg {name} odds</span>
@@ -77,7 +68,7 @@ export function DecimalCalc() {
                 autoComplete="off"
                 value={oddsStr[i]}
                 onChange={(e) => setOdd(i, e.target.value)}
-                placeholder={i === 2 ? 'e.g. 3.40' : '2.00'}
+                placeholder="2.00"
                 aria-label={`Leg ${name} odds`}
               />
             </label>

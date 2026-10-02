@@ -13,7 +13,7 @@ const TAGLINE: Record<CalcTab, string> = {
   boost: 'Bookie boost × Polymarket NO — lock check & share sizing.',
   rolling: 'Rolling hedge — equal profit on all three outcomes.',
   triple: 'Rolling hedge — equal profit on all four outcomes.',
-  decimal: 'Decimal vs decimal — one market backed at two or three bookies.',
+  decimal: 'Decimal vs decimal — one market backed at two bookies.',
 };
 const FOOT: Record<CalcTab, string> = {
   boost: "Sizes one bet's hedge.",

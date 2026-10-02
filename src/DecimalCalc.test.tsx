@@ -36,14 +36,11 @@ describe('DecimalCalc', () => {
     type('Leg B odds', '1.80');
     expect(result()).toContain('DEAD');
   });
-  it('3-way shows a third odds input and three stake rows', () => {
+  it('TWO-WAY only (user 2026-10-03: "remove the calc 3 way") — no 3-way toggle, no third leg, two stake rows', () => {
     render(<DecimalCalc />);
-    fireEvent.click(screen.getByText('3-way (1X2)'));
-    type('Leg A odds', '2.6');
-    type('Leg B odds', '3.5');
-    type('Leg C odds', '3.9');
-    expect(screen.getAllByLabelText('Copy stake')).toHaveLength(3);
-    expect(result()).toContain('Leg C must be ≥');
+    expect(screen.queryByText(/3-way/)).toBeNull();
+    expect(screen.queryByLabelText('Leg C odds')).toBeNull();
+    expect(screen.getAllByLabelText('Copy stake')).toHaveLength(2);
   });
   it('total-stake mode splits €100', () => {
     render(<DecimalCalc />);
