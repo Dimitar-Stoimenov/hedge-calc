@@ -82,3 +82,39 @@ describe('sizeDecimalArb — free bet on leg A (stake not returned)', () => {
     expect(r.exactProfitPct).toBeCloseTo(((20 - 13.333333333) / 10) * 100, 6);
   });
 });
+
+/**
+ * A DOLLAR LEG (user 2026-11-15: "i need dollars conversion for cloudbet. input to stay always eur … a toggle for dollar vs eur").
+ * The live scanner's rule (scanner/src/deep/server/pairs.ts sizeDeepLegs): the $ leg is typed on $0.10 steps — as leg A the
+ * nearest $0.10 to the € amount × rate, as another leg floor or ceil of its ideal $ stake (the better worst case) — the € legs
+ * stay on €0.10 steps, and every € figure follows from those exact stakes. Rates and odds are test inputs.
+ */
+describe('sizeDecimalArb — a leg in dollars', () => {
+  it('leg B in $ (rate 1.16): its stake is a whole $0.10, € = $ / rate; leg A stays the typed €10', () => {
+    const r = sizeDecimalArb({ odds: [2.1, 2.25], mode: 'lead', amount: 10, usdLegs: [false, true], eurUsd: 1.16 });
+    // ideal €9.3333 → $10.8267: floor $10.80 (worst ≈ +1.64) beats ceil $10.90 (≈ +1.60)
+    expect(r.rounded.stakesUsd).toEqual([undefined, 10.8]);
+    expect(r.rounded.stakes[0]).toBe(10);
+    expect(r.rounded.stakes[1]).toBeCloseTo(10.8 / 1.16, 10);
+    expect(Math.round(r.rounded.stakesUsd![1]! * 100) % 10).toBe(0);
+    expect(r.rounded.worstProfitEur).toBeCloseTo(Math.min(21, (10.8 / 1.16) * 2.25) - (10 + 10.8 / 1.16), 10);
+  });
+  it('leg A in $: the nearest $0.10 to €10 × rate; leg B (€) floor/ceil on €0.10', () => {
+    const r = sizeDecimalArb({ odds: [2.1, 2.25], mode: 'lead', amount: 10, usdLegs: [true, false], eurUsd: 1.163 });
+    expect(r.rounded.stakesUsd![0]).toBe(11.6); // 11.63 → 11.60
+    expect(r.rounded.stakes[0]).toBeCloseTo(11.6 / 1.163, 10);
+    expect(Math.round(r.rounded.stakes[1] * 1000) % 100).toBe(0); // € leg on €0.10
+    expect(r.rounded.stakesUsd![1]).toBeUndefined();
+  });
+  it('no rate, or no $ leg → exactly today\'s € sizing (no stakesUsd)', () => {
+    const plain = sizeDecimalArb({ odds: [2.1, 2.25], mode: 'lead', amount: 10 });
+    const noRate = sizeDecimalArb({ odds: [2.1, 2.25], mode: 'lead', amount: 10, usdLegs: [false, true] });
+    const noUsd = sizeDecimalArb({ odds: [2.1, 2.25], mode: 'lead', amount: 10, usdLegs: [false, false], eurUsd: 1.16 });
+    for (const r of [noRate, noUsd]) { expect(r.rounded.stakes).toEqual(plain.rounded.stakes); expect(r.rounded.stakesUsd).toBeUndefined(); }
+  });
+  it('the lock verdict / exact % do not depend on the currency (odds only)', () => {
+    const r = sizeDecimalArb({ odds: [2.1, 2.25], mode: 'lead', amount: 10, usdLegs: [false, true], eurUsd: 1.16 });
+    expect(r.isLock).toBe(true);
+    expect(r.exactProfitPct).toBeCloseTo(8.62, 2);
+  });
+});

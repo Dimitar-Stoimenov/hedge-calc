@@ -26,7 +26,7 @@ const FOOT: Record<CalcTab, string> = {
  * Three calculators (2026-09-21 boost + rolling double; 2026-09-24 rolling triple). They share
  * the EUR→USD rate (one FX toast fills all) and the page chrome. The double and the triple are
  * the SAME component with a different leg count, each mounted on its own tab so the numbers
- * typed into one survive a visit to the other. Bookie vs bookie (2026-10-03) is decimal vs decimal — euro only, no rate.
+ * typed into one survive a visit to the other. Bookie vs bookie (2026-10-03) is decimal vs decimal; a dollar leg (cloudbet, 2026-11-15) uses the same rate.
  */
 export default function App() {
   const [tab, setTab] = useState<CalcTab>('boost');
@@ -51,7 +51,7 @@ export default function App() {
       {tab === 'boost' && <BoostCalc xeStr={xeStr} setXeStr={setXeStr} />}
       {tab === 'rolling' && <RollingCalc key="double" legCount={2} xeStr={xeStr} setXeStr={setXeStr} />}
       {tab === 'triple' && <RollingCalc key="triple" legCount={3} xeStr={xeStr} setXeStr={setXeStr} />}
-      {tab === 'decimal' && <DecimalCalc />}
+      {tab === 'decimal' && <DecimalCalc xeStr={xeStr} setXeStr={setXeStr} />}
 
       <footer className="app-foot">
         <p>

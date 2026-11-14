@@ -345,6 +345,10 @@ export interface DecimalArbInput {
   amount: number;
   /** leg A is a free bet: its stake is not returned (it returns stake × (odds − 1)) and is not cash */
   freeBetLead?: boolean;
+  /** per leg: the book's account is in DOLLARS (cloudbet) — that leg is typed on $0.10 steps (needs `eurUsd`) */
+  usdLegs?: boolean[];
+  /** EUR → USD rate; without it every leg is sized in € */
+  eurUsd?: number;
 }
 
 export interface DecimalArbSizing {
@@ -362,7 +366,11 @@ export interface DecimalArbResult {
   /** the exact (unrounded) lock: of the cash staked, or of the free-bet face with freeBetLead */
   exactProfitPct: number;
   exact: DecimalArbSizing & { profitEur: number };
-  rounded: DecimalArbSizing & { worstProfitEur: number; worstProfitPct: number };
+  rounded: DecimalArbSizing & {
+    worstProfitEur: number; worstProfitPct: number;
+    /** the $ to type per dollar leg (undefined for a € leg); absent = no dollar leg */
+    stakesUsd?: (number | undefined)[];
+  };
   /** the LOWEST odds for the last leg that still lock against the others (Infinity = none can) */
   breakevenLast: number;
 }
@@ -395,26 +403,37 @@ export function sizeDecimalArb(input: DecimalArbInput): DecimalArbResult {
 
   // ROUNDED: leg A as typed ('lead') or to the nearest €0.10 ('total'); the others floor/ceil to €0.10, every
   // combination tried, the higher worst case wins (a tie keeps the smaller outlay).
+  // A DOLLAR LEG (user 2026-11-15: "dollars conversion for cloudbet. input to stay always eur"; the live scanner's rule,
+  // sizeDeepLegs): its grid is $0.10 — as leg A the nearest $0.10 to the € amount × rate, otherwise floor/ceil of its ideal $
+  // — and its € stake is that $ / rate. Every € figure follows from those exact stakes. Candidates are cents of the leg's OWN
+  // currency.
   const step = Math.round(DECIMAL_STEP_EUR * 100);
-  const leadC = mode === 'lead' ? lead * 100 : Math.max(step, Math.round((lead * 100) / step) * step);
+  const xe = input.eurUsd !== undefined && input.eurUsd > 0 ? input.eurUsd : null;
+  const usd = odds.map((_, i) => xe !== null && input.usdLegs?.[i] === true);
+  const anyUsd = usd.some(Boolean);
+  const toEur = (c: number, i: number) => (usd[i] ? c / 100 / (xe as number) : c / 100);
+  const leadNative = (usd[0] ? lead * (xe as number) : lead) * 100;
+  const leadC = mode === 'lead' && !usd[0] ? lead * 100 : Math.max(step, Math.round(leadNative / step) * step);
+  const leadEur = toEur(leadC, 0);
   const options: number[][] = [[leadC]];
   for (let i = 1; i < odds.length; i++) {
-    const ideal = (leadC * pay[0]) / pay[i];
+    const ideal = ((leadEur * pay[0]) / pay[i]) * (usd[i] ? (xe as number) : 1) * 100;
     const lo = Math.max(step, Math.floor(ideal / step + 1e-9) * step);
     options.push(lo >= ideal - 1e-9 ? [lo] : [lo, lo + step]);
   }
-  let best: { sizing: DecimalArbSizing; worst: number } | null = null;
+  let best: { sizing: DecimalArbSizing; worst: number; cents: number[] } | null = null;
   const walk = (i: number, picked: number[]) => {
     if (i === options.length) {
-      const sizing = size(picked.map((c) => c / 100));
+      const sizing = size(picked.map((c, j) => toEur(c, j)));
       const worst = Math.min(...sizing.profitsEur);
-      if (!best || worst > best.worst + 1e-9 || (Math.abs(worst - best.worst) <= 1e-9 && sizing.totalEur < best.sizing.totalEur)) best = { sizing, worst };
+      if (!best || worst > best.worst + 1e-9 || (Math.abs(worst - best.worst) <= 1e-9 && sizing.totalEur < best.sizing.totalEur)) best = { sizing, worst, cents: [...picked] };
       return;
     }
     for (const c of options[i]) { picked.push(c); walk(i + 1, picked); picked.pop(); }
   };
   walk(0, []);
-  const b = best as unknown as { sizing: DecimalArbSizing; worst: number };
+  const b = best as unknown as { sizing: DecimalArbSizing; worst: number; cents: number[] };
+  const stakesUsd = anyUsd ? b.cents.map((c, i) => (usd[i] ? c / 100 : undefined)) : undefined;
   const base = fb ? b.sizing.stakes[0] : b.sizing.totalEur;
 
   // Lock iff the CASH per unit of balanced return is below one unit (a free-bet leg A costs nothing, so it is left out).
@@ -428,7 +447,7 @@ export function sizeDecimalArb(input: DecimalArbInput): DecimalArbResult {
     isLock,
     exactProfitPct: fb ? (exactProfitEur / lead) * 100 : (1 / k - 1) * 100,
     exact: { ...exactSizing, profitEur: exactProfitEur },
-    rounded: { ...b.sizing, worstProfitEur: b.worst, worstProfitPct: base > 0 ? (b.worst / base) * 100 : 0 },
+    rounded: { ...b.sizing, worstProfitEur: b.worst, worstProfitPct: base > 0 ? (b.worst / base) * 100 : 0, ...(stakesUsd ? { stakesUsd } : {}) },
     breakevenLast,
   };
 }

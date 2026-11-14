@@ -1,14 +1,15 @@
 import { useState } from 'react';
-import { sizeDecimalArb } from './calc';
+import { sizeDecimalArb, DEFAULT_XE } from './calc';
 import { fmtMoneyEur, fmtPct } from './format';
 import { parseNum } from './parse';
 
 const LEG_NAMES = ['A', 'B'];
 
-/** One stake cell: the bare number copies (what gets typed into the bookie), like the SX stake. */
-function StakeCopy({ eur, isLock }: { eur: number; isLock: boolean }) {
+/** One stake cell: the bare number copies (what gets typed into the bookie), like the SX stake. A dollar leg shows and copies
+ *  its $ amount (what cloudbet takes), with the € value beside it. */
+function StakeCopy({ eur, usd, isLock }: { eur: number; usd?: number; isLock: boolean }) {
   const [copied, setCopied] = useState(false);
-  const text = eur.toFixed(2);
+  const text = (usd ?? eur).toFixed(2);
   async function copy() {
     try {
       await navigator.clipboard.writeText(text);
@@ -20,8 +21,9 @@ function StakeCopy({ eur, isLock }: { eur: number; isLock: boolean }) {
   }
   return (
     <button type="button" className={`shares-copy ${isLock ? '' : 'muted'}`} onClick={copy} title="Copy stake to clipboard" aria-label="Copy stake">
-      <span className="mono">€{text}</span>
+      <span className="mono">{usd !== undefined ? '$' : '€'}{text}</span>
       <span className="copy-hint">{copied ? '✓' : '⧉'}</span>
+      {usd !== undefined && <span className="mono muted"> ≈ €{eur.toFixed(2)}</span>}
     </button>
   );
 }
@@ -29,9 +31,12 @@ function StakeCopy({ eur, isLock }: { eur: number; isLock: boolean }) {
 /**
  * BOOKIE vs BOOKIE — decimal vs decimal (user 2026-10-03: "i need a calculator for regular odds"). The sizing tool for
  * the live scanner's bookie-vs-bookie rows, with the SAME rule: leg A fixed (default €10), every other leg rounded to a
- * multiple of €0.10, floor or ceil, whichever keeps the higher worst case. Euro only — both legs are bookies.
+ * multiple of €0.10, floor or ceil, whichever keeps the higher worst case.
+ * DOLLAR LEGS (user 2026-11-15: "i need dollars conversion for cloudbet. input to stay always eur, and maybe a toggle for dollar
+ * vs eur"): each leg has a € / $ switch; a $ leg (cloudbet) is sized on $0.10 steps with the app's EUR→USD rate — the live
+ * scanner's rule — and its stake is shown and copied in dollars. The stake input stays in euros; results stay in euros.
  */
-export function DecimalCalc() {
+export function DecimalCalc({ xeStr = String(DEFAULT_XE), setXeStr }: { xeStr?: string; setXeStr?: (s: string) => void } = {}) {
   // TWO legs only (user 2026-10-03: "remove the calc 3 way") — the same rule as the live scanner's rows.
   const ways = 2;
   const [oddsStr, setOddsStr] = useState(['2.10', '2.25']);
@@ -39,6 +44,10 @@ export function DecimalCalc() {
   const [leadStr, setLeadStr] = useState('10');
   const [totalStr, setTotalStr] = useState('100');
   const [freeBet, setFreeBet] = useState(false);
+  const [usdLegs, setUsdLegs] = useState([false, false]);
+  const anyUsd = usdLegs.slice(0, ways).some(Boolean);
+  const xe = parseNum(xeStr);
+  const xeOk = xe !== null && xe > 0;
 
   const odds = oddsStr.slice(0, ways).map(parseNum);
   const amount = parseNum(mode === 'lead' ? leadStr : totalStr);
@@ -46,10 +55,13 @@ export function DecimalCalc() {
   const errors: string[] = [];
   odds.forEach((o, i) => { if (o !== null && o <= 1) errors.push(`Leg ${LEG_NAMES[i]} odds must be greater than 1.`); });
   if (amount !== null && amount <= 0) errors.push('Stake must be greater than 0.');
+  if (anyUsd && !xeOk) errors.push('EUR → USD rate needed for a dollar leg — sized in € until then.');
 
   const ready = odds.every((o) => o !== null && o > 1) && amount !== null && amount > 0;
   // two legs × floor/ceil — cheap enough to size on every render
-  const r = ready ? sizeDecimalArb({ odds: odds as number[], mode, amount: amount as number, freeBetLead: freeBet }) : null;
+  const r = ready ? sizeDecimalArb({ odds: odds as number[], mode, amount: amount as number, freeBetLead: freeBet,
+    ...(anyUsd && xeOk ? { usdLegs: usdLegs.slice(0, ways), eurUsd: xe as number } : {}) }) : null;
+  const setUsd = (i: number, v: boolean) => setUsdLegs((xs) => xs.map((x, j) => (j === i ? v : x)));
 
   const setOdd = (i: number, v: string) => setOddsStr((xs) => xs.map((x, j) => (j === i ? v : x)));
   const last = LEG_NAMES[ways - 1];
@@ -71,6 +83,10 @@ export function DecimalCalc() {
                 placeholder="2.00"
                 aria-label={`Leg ${name} odds`}
               />
+              <span className="segmented" role="group" aria-label={`Leg ${name} currency`}>
+                <button type="button" className={usdLegs[i] ? 'seg' : 'seg on'} aria-pressed={!usdLegs[i]} aria-label={`Leg ${name} in euros`} onClick={() => setUsd(i, false)}>€</button>
+                <button type="button" className={usdLegs[i] ? 'seg on' : 'seg'} aria-pressed={usdLegs[i]} aria-label={`Leg ${name} in dollars`} onClick={() => setUsd(i, true)}>$</button>
+              </span>
             </label>
           ))}
         </div>
@@ -98,6 +114,22 @@ export function DecimalCalc() {
             aria-label="Stake amount in euros"
           />
         </label>
+
+        {anyUsd && (
+          <label className="field">
+            <span className="field-label">EUR → USD rate</span>
+            <input
+              type="text"
+              inputMode="decimal"
+              autoComplete="off"
+              value={xeStr}
+              onChange={(e) => setXeStr?.(e.target.value)}
+              readOnly={!setXeStr}
+              placeholder={String(DEFAULT_XE)}
+              aria-label="EUR → USD rate"
+            />
+          </label>
+        )}
 
         {errors.length > 0 && (
           <ul className="hints">
@@ -138,7 +170,7 @@ export function DecimalCalc() {
                 <tr key={i} className={r.isLock ? '' : 'row-dead'}>
                   <td className="col-stake">{LEG_NAMES[i]}{freeBet && i === 0 ? ' (FB)' : ''}</td>
                   <td className="mono">{(odds[i] as number).toFixed(2)}</td>
-                  <td className="col-cost"><StakeCopy eur={s} isLock={r.isLock} /></td>
+                  <td className="col-cost"><StakeCopy eur={s} usd={r.rounded.stakesUsd?.[i]} isLock={r.isLock} /></td>
                   <td className="mono">€{r.rounded.returns[i].toFixed(2)}</td>
                   <td className={`col-profit mono ${r.rounded.profitsEur[i] >= 0 ? 'pos' : 'neg'}`}>{fmtMoneyEur(r.rounded.profitsEur[i])}</td>
                 </tr>

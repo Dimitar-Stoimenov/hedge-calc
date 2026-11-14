@@ -62,3 +62,39 @@ describe('DecimalCalc', () => {
     expect(result()).toContain('of the free bet');
   });
 });
+
+describe('DecimalCalc — a leg in dollars (user 2026-11-15: "dollars conversion for cloudbet. input to stay always eur … a toggle")', () => {
+  // rate 1.16 is a test input (the app passes its live EUR→USD rate)
+  const R = () => render(<DecimalCalc xeStr="1.16" setXeStr={() => {}} />);
+  it('every leg has a € / $ switch; € by default, so nothing changes until $ is picked', () => {
+    R();
+    expect(screen.getByRole('button', { name: 'Leg A in euros' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Leg B in dollars' }).getAttribute('aria-pressed')).toBe('false');
+    expect(result()).toContain('€9.30');
+    expect(screen.queryByLabelText('EUR → USD rate')).toBeNull();
+  });
+  it('leg B in $: its stake is shown and COPIED in dollars ($0.10 step), the € value beside it; the stake input stays €', async () => {
+    let copied = '';
+    Object.assign(navigator, { clipboard: { writeText: async (s: string) => { copied = s; } } });
+    R();
+    fireEvent.click(screen.getByRole('button', { name: 'Leg B in dollars' }));
+    const t = result();
+    expect(t).toContain('$10.80');
+    expect(t).toContain('≈ €9.31');
+    expect(screen.getByText('Stake on leg A €')).toBeTruthy();
+    fireEvent.click(screen.getAllByLabelText('Copy stake')[1]);
+    await Promise.resolve();
+    expect(copied).toBe('10.80');
+  });
+  it('the rate field appears with a dollar leg and drives the sizing', () => {
+    R();
+    fireEvent.click(screen.getByRole('button', { name: 'Leg B in dollars' }));
+    expect((screen.getByLabelText('EUR → USD rate') as HTMLInputElement).value).toBe('1.16');
+  });
+  it('no usable rate → a hint, and the dollar leg falls back to € sizing', () => {
+    render(<DecimalCalc xeStr="" setXeStr={() => {}} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Leg B in dollars' }));
+    expect(screen.getByText(/EUR → USD rate needed/)).toBeTruthy();
+    expect(result()).toContain('€9.30');
+  });
+});
